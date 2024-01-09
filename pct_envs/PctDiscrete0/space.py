@@ -4,16 +4,19 @@ import copy
 from .convex_hull import ConvexHull, point_in_polygen
 from .PctTools import AddNewEMSZ, maintainEventBottom, smallBox, extreme2D, corners2D
 
+
 class Stack(object):
     def __init__(self, centre, mass):
         self.centre = centre
         self.mass = mass
+
 
 class DownEdge(object):
     def __init__(self, box):
         self.box = box
         self.area = None
         self.centre2D = None
+
 
 def IsUsableEMS(xlow, ylow, zlow, x1, y1, z1, x2, y2, z2):
     xd = x2 - x1
@@ -22,6 +25,7 @@ def IsUsableEMS(xlow, ylow, zlow, x1, y1, z1, x2, y2, z2):
     if ((xd >= xlow) and (yd >= ylow) and (zd >= zlow)):
         return True
     return False
+
 
 class Box(object):
     def __init__(self, x, y, z, lx, ly, lz, density, virtual=False):
@@ -46,7 +50,6 @@ class Box(object):
         self.thisStack = Stack(self.centre, self.mass)
         self.thisVirtualStack = Stack(self.centre, self.mass)
         self.involved = False
-
 
     def calculate_new_com(self, virtual=False):
         new_stack_centre = self.centre * self.mass
@@ -184,7 +187,8 @@ class Box(object):
                 direct_edge = None
                 for e in self.bottom_edges:
                     if self.thisVirtualStack.centre[0] > e.area[0] and self.thisVirtualStack.centre[0] < e.area[2] \
-                            and self.thisVirtualStack.centre[1] > e.area[1] and self.thisVirtualStack.centre[1] < e.area[3]:
+                            and self.thisVirtualStack.centre[1] > e.area[1] and self.thisVirtualStack.centre[1] < \
+                            e.area[3]:
                         direct_edge = e
                         break
 
@@ -267,8 +271,14 @@ class Box(object):
             return True
 
 
+class EMS(object):
+    def __init__(self, x1, y1, z1, x2, y2, z2):
+        self.size = np.array([x1, y1, z1, x2, y2, z2])
+        self.spe_point = []  # x ,x_flag, y, y_flag ,flag=1表示逆向   z值和z1相同
+
+
 class Space(object):
-    def __init__(self, width=10, length=10, height=10, size_minimum=0, holder = 60):
+    def __init__(self, width=10, length=10, height=10, size_minimum=0, holder=60):
         self.plain_size = np.array([width, length, height])
         self.max_axis = max(width, length)
         self.height = height
@@ -292,10 +302,12 @@ class Space(object):
         self.space_mask[:] = 0
         self.left_space[:] = 0
         self.box_vec[:] = 0
-        self.box_vec[0][-1] =1
+        self.box_vec[0][-1] = 1
 
         self.NOEMS = 1
         self.EMS = [np.array([0, 0, 0, *self.plain_size])]
+
+        self.EMS_ = [EMS(0, 0, 0, *self.plain_size)]
 
         self.boxes = []
         self.box_idx = 0
@@ -311,7 +323,8 @@ class Space(object):
         r['y_right'] = [self.plain_size[1]]
 
         self.EMS3D = dict()
-        self.EMS3D[0] = np.array([0, 0, 0, self.plain_size[0], self.plain_size[1], self.plain_size[2], self.serial_number])
+        self.EMS3D[0] = np.array(
+            [0, 0, 0, self.plain_size[0], self.plain_size[1], self.plain_size[2], self.serial_number])
 
     @staticmethod
     def update_height_graph(plain, box):
@@ -383,14 +396,14 @@ class Space(object):
             self.plain = self.update_height_graph(self.plain, self.boxes[-1])
             self.height = max(self.height, max_h + z)
             self.box_vec[self.box_idx] = np.array(
-                        [lx, ly, max_h, lx + x, ly + y, max_h + z, density, 0, 1])
+                [lx, ly, max_h, lx + x, ly + y, max_h + z, density, 0, 1])
             self.box_idx += 1
             return True
         return False
 
     # Virtually place an item into the bin,
     # this function is used to check whether the placement is feasible for the current item
-    def drop_box_virtual(self, box_size, idx, flag, density, setting,  returnH = False, returnMap = False):
+    def drop_box_virtual(self, box_size, idx, flag, density, setting, returnH=False, returnMap=False):
         if not flag:
             x, y, z = box_size
         else:
@@ -428,7 +441,8 @@ class Space(object):
         if returnH:
             return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True), max_h
         elif returnMap:
-            return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True), self.update_height_graph(self.plain, box_now)
+            return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True), self.update_height_graph(self.plain,
+                                                                                                            box_now)
         else:
             return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True)
 
@@ -458,7 +472,8 @@ class Space(object):
         numofemss = len(self.EMS)
         delflag = []
         for emsIdx in range(numofemss):
-            xems1, yems1, zems1, xems2, yems2, zems2 = self.EMS[emsIdx]
+            xems1, yems1, zems1, xems2, yems2, zems2 = self.EMS[emsIdx][0], self.EMS[emsIdx][1], self.EMS[emsIdx][2], \
+                self.EMS[emsIdx][3], self.EMS[emsIdx][4], self.EMS[emsIdx][5]
             xtmp1, ytmp1, ztmp1, xtmp2, ytmp2, ztmp2 = itemLocation
 
             if (xems1 > xtmp1): xtmp1 = xems1
@@ -475,12 +490,53 @@ class Space(object):
                 continue
 
             self.Difference(emsIdx, (xtmp1, ytmp1, ztmp1, xtmp2, ytmp2, ztmp2))
+
             delflag.append(emsIdx)
 
         if len(delflag) != 0:
             NOEMS = len(self.EMS)
             self.EMS = [self.EMS[i] for i in range(NOEMS) if i not in delflag]
         self.EliminateInscribedEMS()
+
+        # maintain the event point by the way
+        cx_min, cy_min, cz_min, cx_max, cy_max, cz_max = itemLocation
+        # bottom
+        if cz_min < self.plain_size[2]:
+            bottomRecorder = self.ZMAP[cz_min]
+            cbox2d = [cx_min, cy_min, cx_max, cy_max]
+            maintainEventBottom(cbox2d, bottomRecorder['x_up'], bottomRecorder['y_left'], bottomRecorder['x_bottom'],
+                                bottomRecorder['y_right'], self.plain_size)
+
+        if cz_max < self.plain_size[2]:
+            AddNewEMSZ(itemLocation, self)
+
+    def GENEMS_(self, itemLocation):
+        numofemss = len(self.EMS_)
+        delflag = []
+        for emsIdx in range(numofemss):
+            xems1, yems1, zems1, xems2, yems2, zems2 = self.EMS_[emsIdx].size
+            xtmp1, ytmp1, ztmp1, xtmp2, ytmp2, ztmp2 = itemLocation
+
+            if (xems1 > xtmp1): xtmp1 = xems1
+            if (yems1 > ytmp1): ytmp1 = yems1
+            if (zems1 > ztmp1): ztmp1 = zems1
+            if (xems2 < xtmp2): xtmp2 = xems2
+            if (yems2 < ytmp2): ytmp2 = yems2
+            if (zems2 < ztmp2): ztmp2 = zems2
+
+            if (xtmp1 > xtmp2): xtmp1 = xtmp2
+            if (ytmp1 > ytmp2): ytmp1 = ytmp2
+            if (ztmp1 > ztmp2): ztmp1 = ztmp2
+            if (xtmp1 == xtmp2 or ytmp1 == ytmp2 or ztmp1 == ztmp2):
+                continue
+
+            self.Difference_(emsIdx, (xtmp1, ytmp1, ztmp1, xtmp2, ytmp2, ztmp2))
+            delflag.append(emsIdx)
+
+        if len(delflag) != 0:
+            NOEMS = len(self.EMS_)
+            self.EMS_ = [self.EMS_[i] for i in range(NOEMS) if i not in delflag]
+        self.EliminateInscribedEMS_()
 
         # maintain the event point by the way
         cx_min, cy_min, cz_min, cx_max, cy_max, cz_max = itemLocation
@@ -511,8 +567,62 @@ class Space(object):
         if IsUsableEMS(self.low_bound, self.low_bound, self.low_bound, x1, y1, z4, x2, y2, z2):
             self.AddNewEMS(x1, y1, z4, x2, y2, z2)
 
+    # Split an EMS when it intersects a placed item
+    def Difference_(self, emsID, intersection):
+        x1, y1, z1, x2, y2, z2 = self.EMS_[emsID]
+        x3, y3, z3, x4, y4, z4, = intersection
+        if self.low_bound == 0:
+            self.low_bound = 0.1
+        if IsUsableEMS(self.low_bound, self.low_bound, self.low_bound, x1, y1, z1, x3, y2, z2):
+            newEMS = EMS(x1, y1, z1, x3, y2, z2)
+            newEMS.spe_point.append([x3, 1, y3, 0])
+            newEMS.spe_point.append([x3, 1, y4, 1])
+            self.AddNewEMS_(emsID, newEMS)
+        if IsUsableEMS(self.low_bound, self.low_bound, self.low_bound, x4, y1, z1, x2, y2, z2):
+            newEMS = EMS(x4, y1, z1, x2, y2, z2)
+            newEMS.spe_point.append([x4, 0, y3, 0])
+            newEMS.spe_point.append([x4, 0, y4, 1])
+            self.AddNewEMS_(emsID, newEMS)
+        if IsUsableEMS(self.low_bound, self.low_bound, self.low_bound, x1, y1, z1, x2, y3, z2):
+            newEMS = EMS(x1, y1, z1, x2, y3, z2)
+            newEMS.spe_point.append([x3, 0, y3, 1])
+            newEMS.spe_point.append([x4, 1, y3, 1])
+            self.AddNewEMS_(emsID, newEMS)
+        if IsUsableEMS(self.low_bound, self.low_bound, self.low_bound, x1, y4, z1, x2, y2, z2):
+            newEMS = EMS(x1, y4, z1, x2, y2, z2)
+            newEMS.spe_point.append([x3, 0, y4, 0])
+            newEMS.spe_point.append([x4, 1, y4, 0])
+            self.AddNewEMS_(emsID, newEMS)
+        if IsUsableEMS(self.low_bound, self.low_bound, self.low_bound, x1, y1, z4, x2, y2, z2):
+            newEMS = EMS(x1, y1, z4, x2, y2, z2)
+            newEMS.spe_point.append([x3, 0, y3, 0])
+            newEMS.spe_point.append([x3, 0, y4, 1])
+            newEMS.spe_point.append([x4, 1, y3, 0])
+            newEMS.spe_point.append([x4, 1, y4, 1])
+            self.AddNewEMS_(emsID, newEMS)
+
     def AddNewEMS(self, a, b, c, x, y, z):
         self.EMS.append(np.array([a, b, c, x, y, z]))
+
+    def AddNewEMS_(self, emsID, newEMS):
+        xems1, yems1, zems1, xems2, yems2, zems2 = newEMS.size
+        for i in range(len(self.EMS_[emsID].spe_point)):
+            exist_flag = False
+            x, x_flag, y, y_flag = self.EMS_[emsID].spe_point[i]
+            z = self.EMS_[emsID].size[5]
+            if z != zems1:
+                continue
+            if x < xems1 or x > xems2 or (x == xems1 and x_flag == 1) or (x == xems2 and x_flag == 0):
+                continue
+            if y < yems1 or y > yems2 or (y == yems1 and y_flag == 1) or (y == yems2 and y_flag == 0):
+                continue
+            for j in range(newEMS.spe_point.size):
+                if self.EMS_[emsID].spe_point[i] == newEMS.spe_point[j]:
+                    exist_flag = True
+                    break
+            if not exist_flag:
+                newEMS.spe_point.append([x, x_flag, y, y_flag])
+        self.EMS_.append(newEMS)
 
     # Eliminate redundant ems
     def EliminateInscribedEMS(self):
@@ -530,11 +640,40 @@ class Space(object):
         self.EMS = [self.EMS[i] for i in range(NOEMS) if delflags[i] != 1]
         return len(self.EMS)
 
+    # Eliminate redundant ems
+    def EliminateInscribedEMS_(self):
+        NOEMS = len(self.EMS)
+        delflags = np.zeros(NOEMS)
+        for i in range(NOEMS):
+            for j in range(NOEMS):
+                if i == j:
+                    continue
+                if (self.EMS_[i].size[0] >= self.EMS_[j].size[0] and self.EMS_[i].size[1] >= self.EMS_[j].size[1]
+                        and self.EMS_[i].size[2] >= self.EMS_[j].size[2] and self.EMS_[i].size[3] <= self.EMS_[j].size[
+                            3]
+                        and self.EMS_[i].size[4] <= self.EMS_[j].size[4] and self.EMS_[i].size[5] <= self.EMS_[j].size[
+                            5]):
+                    delflags[i] = 1
+                    if self.EMS_[i].size[2] == self.EMS_[j].size[2]:
+                        for idx_i in range(len(self.EMS_[i].spe_point)):
+                            exist_flag = False
+                            for idx_j in range(len(self.EMS_[j].spe_point)):
+                                if self.EMS_[i].spe_point[idx_i] == self.EMS_[j].spe_point[idx_j]:
+                                    exist_flag = True
+                                    break
+                            if not exist_flag:
+                                self.EMS_[j].spe_point.append(self.EMS_[i].spe_point[idx_i])
+                    break
+        self.EMS_ = [self.EMS_[i] for i in range(NOEMS) if delflags[i] != 1]
+        return len(self.EMS_)
+
     # Convert EMS to placement (leaf node) for the current item.
     def EMSPoint(self, next_box, setting):
         posVec = set()
-        if setting == 2: orientation = 6
-        else: orientation = 2
+        if setting == 2:
+            orientation = 6
+        else:
+            orientation = 2
 
         for ems in self.EMS:
             for rot in range(orientation):  # 0 x y z, 1 y x z, 2 x z y,  3 y z x, 4 z x y, 5 z y x
@@ -569,11 +708,89 @@ class Space(object):
         posVec = np.array(list(posVec))
         return posVec
 
+    # Convert EMS to placement (leaf node) for the current item.
+    def EMSPoint_(self, next_box, setting):
+        posVec = set()
+        if setting == 2:
+            orientation = 6
+        else:
+            orientation = 2
+
+        for ems in self.EMS_:
+            for rot in range(orientation):  # 0 x y z, 1 y x z, 2 x z y,  3 y z x, 4 z x y, 5 z y x
+                if rot == 0:
+                    sizex, sizey, sizez = next_box[0], next_box[1], next_box[2]
+                elif rot == 1:
+                    sizex, sizey, sizez = next_box[1], next_box[0], next_box[2]
+                    if sizex == sizey:
+                        continue
+                elif rot == 2:
+                    sizex, sizey, sizez = next_box[0], next_box[2], next_box[1]
+                    if sizex == sizey and sizey == sizez:
+                        continue
+                elif rot == 3:
+                    sizex, sizey, sizez = next_box[1], next_box[2], next_box[0]
+                    if sizex == sizey and sizey == sizez:
+                        continue
+                elif rot == 4:
+                    sizex, sizey, sizez = next_box[2], next_box[0], next_box[1]
+                    if sizex == sizey:
+                        continue
+                elif rot == 5:
+                    sizex, sizey, sizez = next_box[2], next_box[1], next_box[0]
+                    if sizex == sizey:
+                        continue
+
+                if ems.size[3] - ems.size[0] >= sizex and ems.size[4] - ems.size[1] >= sizey and ems.size[5] - ems.size[
+                    2] >= sizez:
+                    posVec.add((ems.size[0], ems.size[1], ems.size[2], ems.size[0] + sizex, ems.size[1] + sizey,
+                                ems.size[2] + sizez))
+                    posVec.add((ems.size[3] - sizex, ems.size[1], ems.size[2], ems.size[3], ems.size[1] + sizey,
+                                ems.size[2] + sizez))
+                    posVec.add((ems.size[0], ems.size[4] - sizey, ems.size[2], ems.size[0] + sizex, ems.size[4],
+                                ems.size[2] + sizez))
+                    posVec.add((ems.size[3] - sizex, ems.size[4] - sizey, ems.size[2], ems.size[3], ems.size[4],
+                                ems.size[2] + sizez))
+                    for point in ems.spe_point:
+                        x, x_flag, y, y_flag = point
+                        if x_flag == 0:
+                            lx = ems.size[3] - x
+                        elif x_flag == 1:
+                            lx = x - ems.size[0]
+                        if y_flag == 0:
+                            ly = ems.size[4] - y
+                        elif y_flag == 1:
+                            ly = y - ems.size[1]
+                        if lx >= sizex and ly >= sizey:
+                            if x_flag == 0 and y_flag == 0:
+                                posVec.add((x, y, ems.size[2], x + sizex, y + sizey, ems.size[2] + sizez))
+                            if x_flag == 0 and y_flag == 1:
+                                posVec.add((x, y - sizey, ems.size[2], x + sizex, y, ems.size[2] + sizez))
+                            if x_flag == 1 and y_flag == 0:
+                                posVec.add((x - sizex, y, ems.size[2], x, y + sizey, ems.size[2] + sizez))
+                            if x_flag == 1 and y_flag == 1:
+                                posVec.add((x - sizex, y - sizey, ems.size[2], x, y, ems.size[2] + sizez))
+
+        NOPos=len(posVec)
+        delflags = np.zeros(NOPos)
+        for i in range(NOPos):
+            for j in range(NOPos):
+                if i == j:
+                    continue
+                if posVec[i]==posVec[j]:
+                    delflags[i]=1
+                    break
+        posVec = [posVec[i] for i in range(NOPos) if delflags[i] != 1]
+        posVec = np.array(list(posVec))
+        return posVec
+
     # Find all placement that can accommodate the current item in the full coordinate space
     def FullCoord(self, next_box, setting):
         posVec = set()
-        if setting == 2: orientation = 6
-        else: orientation = 2
+        if setting == 2:
+            orientation = 6
+        else:
+            orientation = 2
 
         for rot in range(orientation):  # 0 x y z, 1 y x z, 2 x z y,  3 y z x, 4 z x y, 5 z y x
             if rot == 0:
@@ -611,8 +828,10 @@ class Space(object):
 
     # Find event points.
     def EventPoint(self, next_box, setting):
-        if setting == 2: orientation = 6
-        else: orientation = 2
+        if setting == 2:
+            orientation = 6
+        else:
+            orientation = 2
 
         allPostion = []
         for k in self.ZMAP.keys():
@@ -673,7 +892,7 @@ class Space(object):
                         ys = ye - sizey
                         posVec.add((xs, ys, k, xe, ye, k + sizez))
 
-            posVec  = np.array(list(posVec))
+            posVec = np.array(list(posVec))
             emsSize = validEms.shape[0]
 
             cmpPos = posVec.repeat(emsSize, axis=0)
@@ -694,8 +913,10 @@ class Space(object):
 
     # Find extre empoints on each distinct two-dimensional plane.
     def ExtremePoint2D(self, next_box, setting):
-        if setting == 2: orientation = 6
-        else: orientation = 2
+        if setting == 2:
+            orientation = 6
+        else:
+            orientation = 2
         cboxList = self.boxes
         if len(cboxList) == 0: return [(0, 0, 0, next_box[0], next_box[1], next_box[2]),
                                        (0, 0, 0, next_box[1], next_box[0], next_box[2])]
@@ -750,8 +971,10 @@ class Space(object):
         return posVec
 
     def CornerPoint(self, next_box, setting):
-        if setting == 2: orientation = 6
-        else: orientation = 2
+        if setting == 2:
+            orientation = 6
+        else:
+            orientation = 2
         cboxList = self.boxes
         if len(cboxList) == 0: return [(0, 0, 0, next_box[0], next_box[1], next_box[2]),
                                        (0, 0, 0, next_box[1], next_box[0], next_box[2])]

@@ -5,13 +5,14 @@ from .binCreator import RandomBoxCreator, LoadBoxCreator, BoxCreator
 import torch
 import random
 
+
 class PackingDiscrete(gym.Env):
     def __init__(self,
                  setting,
                  container_size=(10, 10, 10),
                  item_set=None, data_name=None, load_test_data=False,
                  internal_node_holder=80, leaf_node_holder=50, next_holder=1, shuffle=False,
-                 LNES = 'EMS',
+                 LNES='EMS',
                  **kwags):
 
         self.internal_node_holder = internal_node_holder
@@ -23,9 +24,11 @@ class PackingDiscrete(gym.Env):
         self.size_minimum = np.min(np.array(item_set))
         self.setting = setting
         self.item_set = item_set
-        if self.setting == 2: self.orientation = 6
-        else: self.orientation = 2
-        
+        if self.setting == 2:
+            self.orientation = 6
+        else:
+            self.orientation = 2
+
         # The class that maintains the contents of the bin.
         self.space = Space(*self.bin_size, self.size_minimum, self.internal_node_holder)
 
@@ -39,7 +42,8 @@ class PackingDiscrete(gym.Env):
 
         self.test = load_test_data
         self.observation_space = gym.spaces.Box(low=0.0, high=self.space.height,
-                                                shape=((self.internal_node_holder + self.leaf_node_holder + self.next_holder) * 9,))
+                                                shape=((
+                                                                   self.internal_node_holder + self.leaf_node_holder + self.next_holder) * 9,))
         self.next_box_vec = np.zeros((self.next_holder, 9))
 
         self.LNES = LNES  # Leaf Node Expansion Schemes: EMS (recommend), EV, EP, CP, FC
@@ -56,7 +60,8 @@ class PackingDiscrete(gym.Env):
     # Calculate space utilization inside a bin.
     def get_box_ratio(self):
         coming_box = self.next_box
-        return (coming_box[0] * coming_box[1] * coming_box[2]) / (self.space.plain_size[0] * self.space.plain_size[1] * self.space.plain_size[2])
+        return (coming_box[0] * coming_box[1] * coming_box[2]) / (
+                    self.space.plain_size[0] * self.space.plain_size[1] * self.space.plain_size[2])
 
     def reset(self):
         self.box_creator.reset()
@@ -73,11 +78,14 @@ class PackingDiscrete(gym.Env):
         self.next_box = self.gen_next_box()
 
         if self.test:
-            if self.setting == 3: self.next_den = self.next_box[3]
-            else: self.next_den = 1
+            if self.setting == 3:
+                self.next_den = self.next_box[3]
+            else:
+                self.next_den = 1
             self.next_box = [int(self.next_box[0]), int(self.next_box[1]), int(self.next_box[2])]
         else:
-            if self.setting < 3: self.next_den = 1
+            if self.setting < 3:
+                self.next_den = 1
             else:
                 self.next_den = np.random.random()
                 while self.next_den == 0:
@@ -98,10 +106,12 @@ class PackingDiscrete(gym.Env):
 
     # Detect potential leaf nodes and check their feasibility.
     def get_possible_position(self):
-        if   self.LNES == 'EMS':
-            allPostion = self.space.EMSPoint(self.next_box,  self.setting)
+        if self.LNES == 'EMS_':
+            allPostion = self.space.EMSPoint_(self.next_box, self.setting)
+        if self.LNES == 'EMS':
+            allPostion = self.space.EMSPoint(self.next_box, self.setting)
         elif self.LNES == 'EV':
-            allPostion = self.space.EventPoint(self.next_box,  self.setting)
+            allPostion = self.space.EventPoint(self.next_box, self.setting)
         elif self.LNES == 'EP':
             allPostion = self.space.ExtremePoint2D(self.next_box, self.setting)
         elif self.LNES == 'CP':
@@ -149,8 +159,10 @@ class PackingDiscrete(gym.Env):
         return action, next_box
 
     def step(self, action):
-        if len(action) != 3: action, next_box = self.LeafNode2Action(action)
-        else: next_box = self.next_box
+        if len(action) != 3:
+            action, next_box = self.LeafNode2Action(action)
+        else:
+            next_box = self.next_box
 
         idx = [action[1], action[2]]
         bin_index = 0
@@ -169,10 +181,14 @@ class PackingDiscrete(gym.Env):
         ################################################
         packed_box = self.space.boxes[-1]
 
-        if  self.LNES == 'EMS':
+        if self.LNES == 'EMS':
             self.space.GENEMS([packed_box.lx, packed_box.ly, packed_box.lz,
-                                           packed_box.lx + packed_box.x, packed_box.ly + packed_box.y,
-                                           packed_box.lz + packed_box.z])
+                               packed_box.lx + packed_box.x, packed_box.ly + packed_box.y,
+                               packed_box.lz + packed_box.z])
+        if self.LNES == 'EMS_':
+            self.space.GENEMS_([packed_box.lx, packed_box.ly, packed_box.lz,
+                                packed_box.lx + packed_box.x, packed_box.ly + packed_box.y,
+                                packed_box.lz + packed_box.z])
 
         self.packed.append(
             [packed_box.x, packed_box.y, packed_box.z, packed_box.lx, packed_box.ly, packed_box.lz, bin_index])
