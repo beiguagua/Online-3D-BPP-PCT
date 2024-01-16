@@ -108,7 +108,7 @@ class PackingDiscrete(gym.Env):
     def get_possible_position(self):
         if self.LNES == 'EMS_':
             allPostion = self.space.EMSPoint_(self.next_box, self.setting)
-        if self.LNES == 'EMS':
+        elif self.LNES == 'EMS':
             allPostion = self.space.EMSPoint(self.next_box, self.setting)
         elif self.LNES == 'EV':
             allPostion = self.space.EventPoint(self.next_box, self.setting)

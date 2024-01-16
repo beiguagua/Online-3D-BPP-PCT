@@ -569,7 +569,7 @@ class Space(object):
 
     # Split an EMS when it intersects a placed item
     def Difference_(self, emsID, intersection):
-        x1, y1, z1, x2, y2, z2 = self.EMS_[emsID]
+        x1, y1, z1, x2, y2, z2 = self.EMS_[emsID].size
         x3, y3, z3, x4, y4, z4, = intersection
         if self.low_bound == 0:
             self.low_bound = 0.1
@@ -642,7 +642,7 @@ class Space(object):
 
     # Eliminate redundant ems
     def EliminateInscribedEMS_(self):
-        NOEMS = len(self.EMS)
+        NOEMS = len(self.EMS_)
         delflags = np.zeros(NOEMS)
         for i in range(NOEMS):
             for j in range(NOEMS):
@@ -770,17 +770,17 @@ class Space(object):
                                 posVec.add((x - sizex, y, ems.size[2], x, y + sizey, ems.size[2] + sizez))
                             if x_flag == 1 and y_flag == 1:
                                 posVec.add((x - sizex, y - sizey, ems.size[2], x, y, ems.size[2] + sizez))
-
-        NOPos=len(posVec)
-        delflags = np.zeros(NOPos)
-        for i in range(NOPos):
-            for j in range(NOPos):
-                if i == j:
-                    continue
-                if posVec[i]==posVec[j]:
-                    delflags[i]=1
-                    break
-        posVec = [posVec[i] for i in range(NOPos) if delflags[i] != 1]
+        # Set will automatically remove duplicates
+        # NOPos=len(posVec)
+        # delflags = np.zeros(NOPos)
+        # for i in range(NOPos):
+        #     for j in range(NOPos):
+        #         if i == j:
+        #             continue
+        #         if posVec[i]==posVec[j]:
+        #             delflags[i]=1
+        #             break
+        # posVec = [posVec[i] for i in range(NOPos) if delflags[i] != 1]
         posVec = np.array(list(posVec))
         return posVec
 

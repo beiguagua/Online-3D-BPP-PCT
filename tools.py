@@ -129,8 +129,8 @@ def load_policy(load_path, upper_policy):
 
 def get_args():
     parser = argparse.ArgumentParser(description='PCT arguments')
-    parser.add_argument('--setting', type=int, default=2, help='Experiment setting, please see our paper for details')
-    parser.add_argument('--lnes', type=str, default='EMS', help='Leaf Node Expansion Schemes: EMS (recommend), EV, EP, CP, FC')
+    parser.add_argument('--setting', type=int, default=1, help='Experiment setting, please see our paper for details')
+    parser.add_argument('--lnes', type=str, default='EMS_', help='Leaf Node Expansion Schemes: EMS (recommend), EV, EP, CP, FC')
     parser.add_argument('--internal-node-holder', type=int, default=80, help='Maximum number of internal nodes')
     parser.add_argument('--leaf-node-holder', type=int, default=50, help='Maximum number of leaf nodes')
     parser.add_argument('--shuffle',type=bool, default=True, help='Randomly shuffle the leaf nodes')
