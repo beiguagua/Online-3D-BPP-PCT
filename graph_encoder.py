@@ -8,7 +8,7 @@ class SkipConnection(nn.Module):
         self.module = module
 
     def forward(self, input):
-        return {'data':input['data'] + self.module(input), 'mask': input['mask'], 'graph_size':input['graph_size']}
+        return {'data':input['data'] + self.module(input), 'mask': input['mask'], 'graph_size':input['graph_size'], 'evaluate': input['evaluate']}
 
 class SkipConnection_Linear(nn.Module):
     def __init__(self, module):
@@ -16,7 +16,7 @@ class SkipConnection_Linear(nn.Module):
         self.module = module
 
     def forward(self, input):
-        return {'data':input['data'] + self.module(input['data']), 'mask': input['mask'], 'graph_size': input['graph_size']}
+        return {'data':input['data'] + self.module(input['data']), 'mask': input['mask'], 'graph_size': input['graph_size'], 'evaluate': input['evaluate']}
 
 class MultiHeadAttention(nn.Module):
     def __init__(
@@ -26,6 +26,7 @@ class MultiHeadAttention(nn.Module):
             embed_dim=None,
             val_dim=None,
             key_dim=None,
+            internal_node_holder=None
     ):
         super(MultiHeadAttention, self).__init__()
 
@@ -46,6 +47,8 @@ class MultiHeadAttention(nn.Module):
         self.W_query = nn.Linear(input_dim, key_dim, bias=False)
         self.W_key = nn.Linear(input_dim, key_dim, bias=False)
         self.W_val = nn.Linear(input_dim, val_dim, bias=False)
+
+        self.internal_node_holder = internal_node_holder
 
         if embed_dim is not None:
             # self.W_out = nn.Parameter(torch.Tensor(n_heads, key_dim, embed_dim))
@@ -94,6 +97,7 @@ class MultiHeadAttention(nn.Module):
 
         # Optionally apply mask to prevent attention
         mask = mask.unsqueeze(1).repeat((1, graph_size, 1)).bool()
+        mask[:,self.internal_node_holder:,self.internal_node_holder:] = 1
         if mask is not None:
             mask = mask.view(1, batch_size, n_query, graph_size).expand_as(compatibility)
             if data['evaluate']:
@@ -117,13 +121,15 @@ class MultiHeadAttentionLayer(nn.Sequential):
             self,
             n_heads,
             embed_dim,
-            feed_forward_hidden=128):
+            feed_forward_hidden=128,
+            internal_node_holder=None):
         super(MultiHeadAttentionLayer, self).__init__(
             SkipConnection(
                 MultiHeadAttention(
                     n_heads,
                     input_dim=embed_dim,
                     embed_dim=embed_dim,
+                    internal_node_holder=internal_node_holder,
                 )
             ),
             SkipConnection_Linear(
@@ -144,6 +150,7 @@ class GraphAttentionEncoder(nn.Module):
             node_dim=None,
             feed_forward_hidden=128,
             graph_size=None,
+            internal_node_holder=None
     ):
         super(GraphAttentionEncoder, self).__init__()
 
@@ -151,7 +158,7 @@ class GraphAttentionEncoder(nn.Module):
         self.init_embed = nn.Linear(node_dim, embed_dim) if node_dim is not None else None
         self.graph_size = graph_size
         self.layers = nn.Sequential(*(
-            MultiHeadAttentionLayer(n_heads, embed_dim, feed_forward_hidden)
+            MultiHeadAttentionLayer(n_heads, embed_dim, feed_forward_hidden,internal_node_holder=internal_node_holder,)
             for _ in range(n_layers)
         ))
 
