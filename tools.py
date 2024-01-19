@@ -141,7 +141,7 @@ def get_args():
     parser.add_argument('--seed',   type=int, default=4, help='Random seed')
 
     parser.add_argument('--use-acktr', type=bool, default=True, help='Use acktr, otherwise A2C')
-    parser.add_argument('--num-processes', type=int, default=16, help='The number of parallel processes used for training')
+    parser.add_argument('--num-processes', type=int, default=64, help='The number of parallel processes used for training')
     parser.add_argument('--num-steps', type=int, default=5, help='The rollout length for n-step training')
     parser.add_argument('--learning-rate', type=float, default=1e-6, metavar='η', help='Learning rate, only works for A2C')
     parser.add_argument('--actor-loss-coef',        type=float, default=1.0, help='The coefficient of actor loss')

@@ -16,8 +16,8 @@ def main(args):
 
     # The name of this experiment, related file backups and experiment tensorboard logs will
     # be saved to '.\logs\experiment' and '.\logs\runs'
-    # custom = input('Please input the experiment name\n')
-    custom = 'setting1_EMS1'
+    custom = input('Please input the experiment name\n')
+    # custom = 'BP_Masked_80_50'
     timeStr = custom + '-' + time.strftime('%Y.%m.%d-%H-%M-%S', time.localtime(time.time()))
 
     if args.no_cuda:
@@ -36,6 +36,7 @@ def main(args):
     # Backup all py files and create tensorboard logs
     backup(timeStr, args, None)
     log_writer_path = './logs/runs/{}'.format('PCT-' + timeStr)
+    # log_writer_path = '~/tf-logs'
     if not os.path.exists(log_writer_path):
         os.makedirs(log_writer_path)
     writer = SummaryWriter(logdir=log_writer_path)

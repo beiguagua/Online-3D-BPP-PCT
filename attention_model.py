@@ -56,8 +56,8 @@ class AttentionModel(nn.Module):
         self.next_holder = 1
         self.leaf_node_holder = leaf_node_holder
 
-        # graph_size = internal_node_holder + leaf_node_holder + self.next_holder
-        graph_size = internal_node_holder + leaf_node_holder
+        graph_size = internal_node_holder + leaf_node_holder + self.next_holder
+        # graph_size = internal_node_holder + leaf_node_holder
 
         activate, ini = nn.LeakyReLU, 'leaky_relu'
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), nn.init.calculate_gain(ini))
@@ -72,10 +72,10 @@ class AttentionModel(nn.Module):
             activate(),
             init_(nn.Linear(32, embedding_dim)))
 
-        # self.init_next_embed = nn.Sequential(
-        #     init_(nn.Linear(6, 32)),
-        #     activate(),
-        #     init_(nn.Linear(32, embedding_dim)))
+        self.init_next_embed = nn.Sequential(
+            init_(nn.Linear(6, 32)),
+            activate(),
+            init_(nn.Linear(32, embedding_dim)))
 
         # Graph attention model
         self.embedder = GraphAttentionEncoder(
@@ -100,15 +100,15 @@ class AttentionModel(nn.Module):
         valid_length = full_mask.sum(1)
         full_mask = 1 - full_mask
 
-        full_mask = full_mask[:,:-1]
+        # full_mask = full_mask[:,:-1]
 
 
         batch_size = input.size(0)
-        # graph_size = input.size(1)
+        graph_size = input.size(1)
         internal_nodes_size = internal_nodes.size(1)
         leaf_node_size = leaf_nodes.size(1)
         next_size = next_item.size(1)
-        graph_size = internal_nodes_size+leaf_node_size
+        # graph_size = internal_nodes_size+leaf_node_size
 
         internal_inputs = internal_nodes.contiguous().view(batch_size * internal_nodes_size, self.internal_node_length)*normFactor
         leaf_inputs = leaf_nodes.contiguous().view(batch_size * leaf_node_size, 8)*normFactor
@@ -118,10 +118,10 @@ class AttentionModel(nn.Module):
         # presented by descriptors in different formats into the homogeneous node features.
         internal_embedded_inputs = self.init_internal_node_embed(internal_inputs).reshape((batch_size, -1, self.embedding_dim))
         leaf_embedded_inputs = self.init_leaf_node_embed(leaf_inputs).reshape((batch_size, -1, self.embedding_dim))
-        # next_embedded_inputs = self.init_next_embed(current_inputs.squeeze()).reshape(batch_size, -1, self.embedding_dim)
-        # init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs, next_embedded_inputs), dim=1).view(batch_size * graph_size, self.embedding_dim)
-        init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs), dim=1).view(
-            batch_size * graph_size, self.embedding_dim)
+        next_embedded_inputs = self.init_next_embed(current_inputs.squeeze()).reshape(batch_size, -1, self.embedding_dim)
+        init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs, next_embedded_inputs), dim=1).view(batch_size * graph_size, self.embedding_dim)
+        # init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs), dim=1).view(
+        #     batch_size * graph_size, self.embedding_dim)
 
 
         # transform init_embedding into high-level node features.
