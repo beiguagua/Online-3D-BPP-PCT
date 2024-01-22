@@ -396,6 +396,49 @@ class Space(object):
         else:
             y, x, z = box_size
 
+        lx, ly = idx
+        rec = self.plain[lx:lx + x, ly:ly + y]
+        max_h = np.max(rec)
+        box_now = Box(x, y, z, lx, ly, max_h, density, True)
+
+        if setting != 2:
+            combine_contact_points = []
+            for tmp in self.boxes:
+                if tmp.lz + tmp.z == max_h:
+                    x1 = max(box_now.vertex_low[0], tmp.vertex_low[0])
+                    y1 = max(box_now.vertex_low[1], tmp.vertex_low[1])
+                    x2 = min(box_now.vertex_high[0], tmp.vertex_high[0])
+                    y2 = min(box_now.vertex_high[1], tmp.vertex_high[1])
+                    if x1 >= x2 or y1 >= y2:
+                        continue
+                    else:
+                        newEdge = DownEdge(tmp)
+                        newEdge.area = (x1, y1, x2, y2)
+                        newEdge.centre2D = np.array([x1 + x2, y1 + y2]) / 2
+                        box_now.bottom_edges.append(newEdge)
+                        combine_contact_points.append([x1, y1])
+                        combine_contact_points.append([x1, y2])
+                        combine_contact_points.append([x2, y1])
+                        combine_contact_points.append([x2, y2])
+
+            if len(combine_contact_points) > 0:
+                box_now.bottom_whole_contact_area = self.scale_down(ConvexHull(combine_contact_points))
+
+        if returnH:
+            return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True), max_h
+        elif returnMap:
+            return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True), self.update_height_graph(self.plain, box_now)
+        else:
+            return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True)
+
+    # Virtually place an item into the bin,
+    # this function is used to check whether the placement is feasible for the current item
+    def drop_box_virtual_(self, box_size, idx, flag, density, setting, returnH=False, returnMap=False):
+        if not flag:
+            x, y, z = box_size
+        else:
+            y, x, z = box_size
+
         lx, ly, lz = idx
         rec = self.plain[lx:lx + x, ly:ly + y]
         max_h = np.max(rec)
@@ -435,7 +478,8 @@ class Space(object):
         if returnH:
             return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True), max_h
         elif returnMap:
-            return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True), self.update_height_graph(self.plain, box_now)
+            return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True), self.update_height_graph(
+                self.plain, box_now)
         else:
             return self.check_box(x, y, lx, ly, z, max_h, box_now, setting, True)
 
