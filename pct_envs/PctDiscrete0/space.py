@@ -396,9 +396,16 @@ class Space(object):
         else:
             y, x, z = box_size
 
-        lx, ly = idx
+        lx, ly, lz = idx
         rec = self.plain[lx:lx + x, ly:ly + y]
         max_h = np.max(rec)
+        if max_h != lz:
+            if returnH:
+                return False, max_h
+            elif returnMap:
+                return False, self.plain
+            else:
+                return False
 
         box_now = Box(x, y, z, lx, ly, max_h, density, True)
 

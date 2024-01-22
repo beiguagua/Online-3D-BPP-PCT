@@ -124,7 +124,7 @@ class PackingDiscrete(gym.Env):
             y = ye - ys
             z = ze - zs
 
-            if self.space.drop_box_virtual([x, y, z], (xs, ys), False, self.next_den, self.setting):
+            if self.space.drop_box_virtual([x, y, z], (xs, ys, zs), False, self.next_den, self.setting):
                 tmp_list.append([xs, ys, zs, xe, ye, self.bin_size[2], 0, 0, 1])
                 leaf_node_idx += 1
 
