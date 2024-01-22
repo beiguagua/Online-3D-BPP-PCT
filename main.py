@@ -58,4 +58,5 @@ def main(args):
 if __name__ == '__main__':
     registration_envs()
     args = get_args()
+    args.setting=1
     main(args)

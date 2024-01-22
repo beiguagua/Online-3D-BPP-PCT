@@ -1,38 +1,24 @@
 import torch
-from torch import nn
+from torch import nn,bool
 import math
+from typing import Tuple
 
-class SkipConnection(nn.Module):
-    def __init__(self, module):
-        super(SkipConnection, self).__init__()
-        self.module = module
-
-    def forward(self, input):
-        return {'data':input['data'] + self.module(input), 'mask': input['mask'], 'graph_size':input['graph_size']}
-
-class SkipConnection_Linear(nn.Module):
-    def __init__(self, module):
-        super(SkipConnection_Linear, self).__init__()
-        self.module = module
-
-    def forward(self, input):
-        return {'data':input['data'] + self.module(input['data']), 'mask': input['mask'], 'graph_size': input['graph_size']}
 
 class MultiHeadAttention(nn.Module):
     def __init__(
             self,
-            n_heads,
-            input_dim,
-            embed_dim=None,
-            val_dim=None,
-            key_dim=None,
+            n_heads:int,
+            input_dim:int,
+            embed_dim:int=0,
+            val_dim:int=0,
+            key_dim:int=0,
     ):
         super(MultiHeadAttention, self).__init__()
 
-        if val_dim is None:
-            assert embed_dim is not None, "Provide either embed_dim or val_dim"
+        if val_dim is 0:
+            assert embed_dim is not 0, "Provide either embed_dim or val_dim"
             val_dim = embed_dim // n_heads
-        if key_dim is None:
+        if key_dim is 0:
             key_dim = val_dim
 
         self.n_heads = n_heads
@@ -47,7 +33,7 @@ class MultiHeadAttention(nn.Module):
         self.W_key = nn.Linear(input_dim, key_dim, bias=False)
         self.W_val = nn.Linear(input_dim, val_dim, bias=False)
 
-        if embed_dim is not None:
+        if embed_dim is not 0:
             # self.W_out = nn.Parameter(torch.Tensor(n_heads, key_dim, embed_dim))
             self.W_out = nn.Linear(key_dim, embed_dim)
 
@@ -59,19 +45,16 @@ class MultiHeadAttention(nn.Module):
             stdv = 1. / math.sqrt(param.size(-1))
             param.data.uniform_(-stdv, stdv)
 
-    def forward(self, data, h=None):
+    def forward(self, q:torch.Tensor, mask:torch.Tensor, graph_size:int, evaluate:bool, h:torch.Tensor)->torch.Tensor:
         """
         :param q: queries (batch_size, n_query, input_dim)
         :param h: data (batch_size, graph_size, input_dim)
         :param mask: mask (batch_size, n_query, graph_size) or viewable as that (i.e. can be 2 dim if n_query == 1)
         Mask should contain 1 if attention is not possible (i.e. mask is negative adjacency)
+        :param graph_size: Size of the graph.
+        :param evaluate: Whether to perform evaluation.
         :return:
         """
-        q = data['data']
-        mask = data['mask']
-        graph_size = data['graph_size']
-        if h is None:
-            h = q
 
         batch_size = int(q.size()[0] / graph_size)
         graph_size = graph_size
@@ -85,22 +68,22 @@ class MultiHeadAttention(nn.Module):
         # last dimension can be different for keys and values
         shp = (self.n_heads, batch_size, graph_size, -1)
         shp_q = (self.n_heads, batch_size, n_query, -1)
-        Q = self.W_query(qflat).view(shp_q)
-        K = self.W_key(hflat).view(shp)
-        V = self.W_val(hflat).view(shp)
+        Q = self.W_query(qflat).view(*shp_q)
+        K = self.W_key(hflat).view(*shp)
+        V = self.W_val(hflat).view(*shp)
 
         # Calculate compatibility (n_heads, batch_size, n_query, graph_size)
         compatibility = self.norm_factor * torch.matmul(Q, K.transpose(2, 3))
 
         # Optionally apply mask to prevent attention
-        mask = mask.unsqueeze(1).repeat((1, graph_size, 1)).bool()
+        mask = mask.unsqueeze(1).repeat(*(1, graph_size, 1)) > 0
         if mask is not None:
             mask = mask.view(1, batch_size, n_query, graph_size).expand_as(compatibility)
-            if data['evaluate']:
+            if evaluate:
                 compatibility[mask] = -math.inf
             else:
                 compatibility[mask] = -30
-        attn = torch.softmax(compatibility, dim=-1) #
+        attn = torch.softmax(compatibility, dim=-1)  #
 
         # If there are nodes with no neighbours then softmax returns nan so we fix them to 0
         if mask is not None:
@@ -109,58 +92,60 @@ class MultiHeadAttention(nn.Module):
             attn = attnc
 
         heads = torch.matmul(attn, V)
-        out = self.W_out(heads.permute(1, 2, 0, 3).contiguous().view(-1, self.n_heads * self.val_dim)).view(batch_size * n_query, self.embed_dim)
+        out = self.W_out(heads.permute(1, 2, 0, 3).contiguous().view(-1, self.n_heads * self.val_dim)).view(
+            batch_size * n_query, self.embed_dim)
         return out
 
-class MultiHeadAttentionLayer(nn.Sequential):
+
+class MultiHeadAttentionLayer(nn.Module):
     def __init__(
             self,
+            n_heads:int,
+            embed_dim:int,
+            feed_forward_hidden:int=128):
+        super(MultiHeadAttentionLayer, self).__init__()
+        self.mha = MultiHeadAttention(
             n_heads,
-            embed_dim,
-            feed_forward_hidden=128):
-        super(MultiHeadAttentionLayer, self).__init__(
-            SkipConnection(
-                MultiHeadAttention(
-                    n_heads,
-                    input_dim=embed_dim,
-                    embed_dim=embed_dim,
-                )
-            ),
-            SkipConnection_Linear(
-                nn.Sequential(
-                    nn.Linear(embed_dim, feed_forward_hidden),
-                    nn.ReLU(),
-                    nn.Linear(feed_forward_hidden, embed_dim)
-                ) if feed_forward_hidden > 0 else nn.Linear(embed_dim, embed_dim)
-            ),
+            input_dim=embed_dim,
+            embed_dim=embed_dim,
         )
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, feed_forward_hidden),
+            nn.ReLU(),
+            nn.Linear(feed_forward_hidden, embed_dim)
+        ) if feed_forward_hidden > 0 else nn.Linear(embed_dim, embed_dim)
+
+    def forward(self, data:torch.Tensor, mask:torch.Tensor, graph_size:int, evaluate:bool)->torch.Tensor:
+        data = data + self.mha(data, mask=mask, graph_size=graph_size, evaluate=evaluate, h=data)
+        data = data + self.mlp(data)
+        return data
 
 class GraphAttentionEncoder(nn.Module):
     def __init__(
             self,
-            n_heads,
-            embed_dim,
-            n_layers,
-            node_dim=None,
-            feed_forward_hidden=128,
-            graph_size=None,
+            n_heads:int,
+            embed_dim:int,
+            n_layers:int,
+            graph_size:int,
+            node_dim:int=0,
+            feed_forward_hidden:int=128,
+
     ):
         super(GraphAttentionEncoder, self).__init__()
-
+        self.graph_size=graph_size
         # To map input to embedding space
-        self.init_embed = nn.Linear(node_dim, embed_dim) if node_dim is not None else None
-        self.graph_size = graph_size
-        self.layers = nn.Sequential(*(
-            MultiHeadAttentionLayer(n_heads, embed_dim, feed_forward_hidden)
-            for _ in range(n_layers)
-        ))
+        self.init_embed = nn.Linear(node_dim, embed_dim) if node_dim != 0 else None
+        self.layers_size = n_layers
+        # self.layers = nn.Sequential(*(
+        #     MultiHeadAttentionLayer(n_heads, embed_dim, feed_forward_hidden)
+        #     for _ in range(n_layers)
+        # ))
+        self.layers = MultiHeadAttentionLayer(n_heads, embed_dim, feed_forward_hidden)
 
-    def forward(self, x, mask=None, limited=False, evaluate = False):
-
+    def forward(self, x:torch.Tensor, mask:torch.Tensor, evaluate:bool=False)->Tuple[torch.Tensor,torch.Tensor]:
         # Batch multiply to get initial embeddings of nodes
         h = self.init_embed(x.view(-1, x.size(-1))).view(*x.size()[:2], -1) if self.init_embed is not None else x
-
-        data = {'data':h, 'mask': mask, 'graph_size': self.graph_size, 'evaluate': evaluate}
-        h = self.layers(data)['data']
+        # for layer in self.layers:
+        #     h = layer(h, mask=mask, graph_size=self.graph_size, evaluate=evaluate)
+        h=self.layers(h, mask=mask, graph_size=self.graph_size, evaluate=evaluate)
         return (h, h.view(int(h.size()[0] / self.graph_size), self.graph_size, -1).mean(dim=1),)
-

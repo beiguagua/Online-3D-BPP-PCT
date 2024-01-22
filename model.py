@@ -1,10 +1,11 @@
+import torch
 import torch.nn as nn
-from tools import init
 from numpy import sqrt
 from attention_model import AttentionModel
+from argparse import Namespace
 
 class DRL_GAT(nn.Module):
-    def __init__(self, args):
+    def __init__(self, args:Namespace):
         super(DRL_GAT, self).__init__()
 
         self.actor = AttentionModel(args.embedding_size,
@@ -15,15 +16,17 @@ class DRL_GAT(nn.Module):
                                     internal_node_length = args.internal_node_length,
                                     leaf_node_holder = args.leaf_node_holder,
                                     )
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), sqrt(2))
-        self.critic = init_(nn.Linear(args.embedding_size, 1))
+        self.critic = nn.Linear(args.embedding_size, 1)
+        nn.init.xavier_normal_(self.critic.weight.data,gain=sqrt(2))
 
-    def forward(self, items, deterministic = False, normFactor = 1, evaluate = False):
+    # @torch.jit.script_method
+    def forward(self, items:torch.Tensor, deterministic:bool = False, normFactor:int = 1, evaluate:bool = False):
         o, p, dist_entropy, hidden, _= self.actor(items, deterministic, normFactor = normFactor, evaluate = evaluate)
         values = self.critic(hidden)
         return o, p, dist_entropy,values
 
-    def evaluate_actions(self, items, actions, normFactor = 1):
+    # @torch.jit.script_method
+    def evaluate_actions(self, items:torch.Tensor, actions:torch.Tensor, normFactor:int = 1):
         _, p, dist_entropy, hidden, dist = self.actor(items, evaluate_action = True, normFactor = normFactor)
         action_log_probs = dist.log_probs(actions)
         values =  self.critic(hidden)
