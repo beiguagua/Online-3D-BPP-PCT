@@ -99,16 +99,16 @@ def MACS(env, times = 2000):
                     if ems[3] - ems[0] >= x and ems[4] - ems[1] >= y and ems[5] - ems[2] >= z:
                         for corner in range(4):
                             if corner == 0:
-                                lx, ly = ems[0], ems[1]
+                                lx, ly, lz = ems[0], ems[1], ems[2]
                             elif corner == 1:
-                                lx, ly = ems[3] - x, ems[1]
+                                lx, ly, lz = ems[3] - x, ems[1], ems[2]
                             elif corner == 2:
-                                lx, ly = ems[0], ems[4] - y
+                                lx, ly, lz = ems[0], ems[4] - y, ems[2]
                             elif corner == 3:
-                                lx, ly = ems[3] - x, ems[4] - y
+                                lx, ly, lz = ems[3] - x, ems[4] - y, ems[2]
 
                             # Check the feasibility of this placement
-                            feasible, height = env.space.drop_box_virtual([x, y, z], (lx, ly), False,
+                            feasible, height = env.space.drop_box_virtual_([x, y, z], (lx, ly, lz), False,
                                                                               next_den, env.setting, returnH=True)
                             if feasible:
                                 updated_containers = container.copy()
@@ -186,9 +186,9 @@ def LASH(env, times = 2000):
                         y, z, x = next_box
 
                     if ems[3] - ems[0] >= x and ems[4] - ems[1] >= y and ems[5] - ems[2] >= z:
-                        lx, ly = ems[0], ems[1]
+                        lx, ly, lz = ems[0], ems[1], ems[2]
                         # Check the feasibility of this placement
-                        feasible, height = env.space.drop_box_virtual([x, y, z], (lx, ly), False,
+                        feasible, height = env.space.drop_box_virtual_([x, y, z], (lx, ly, lz), False,
                                                                     next_den, env.setting, returnH=True)
 
                         if feasible:
@@ -408,7 +408,7 @@ def OnlineBPH(env, times = 2000):
                         y, z, x = next_box
 
                     # Check the feasibility of this placement
-                    if env.space.drop_box_virtual([x, y, z], (ems[0], ems[1]), False, next_den, env.setting):
+                    if env.space.drop_box_virtual_([x, y, z], (ems[0], ems[1], ems[2]), False, next_den, env.setting):
                         env.next_box = [x, y, z]
                         bestAction = [0, ems[0], ems[1]]
                         stop = True
@@ -555,9 +555,9 @@ def BR(env, times = 2000):
                         y, z, x = next_box
 
                     if ems[3] - ems[0] >= x and ems[4] - ems[1] >= y and ems[5] - ems[2] >= z:
-                        lx, ly = ems[0], ems[1]
+                        lx, ly, lz = ems[0], ems[1], ems[2]
                         # Check the feasibility of this placement
-                        feasible, height = env.space.drop_box_virtual([x, y, z], (lx, ly), False,
+                        feasible, height = env.space.drop_box_virtual_([x, y, z], (lx, ly, lz), False,
                                                                           next_den, env.setting, returnH=True)
                         if feasible:
                             score = eval_ems(ems)
