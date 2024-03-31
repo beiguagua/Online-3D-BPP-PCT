@@ -106,8 +106,8 @@ class PackingDiscrete(gym.Env):
 
     # Detect potential leaf nodes and check their feasibility.
     def get_possible_position(self):
-        if self.LNES == 'EMS_':
-            allPostion = self.space.EMSPoint_(self.next_box, self.setting)
+        if self.LNES == 'BP':
+            allPostion = self.space.BoundaryPoint(self.next_box, self.setting)
         elif self.LNES == 'EMS':
             allPostion = self.space.EMSPoint(self.next_box, self.setting)
         elif self.LNES == 'EV':
@@ -135,7 +135,7 @@ class PackingDiscrete(gym.Env):
             z = ze - zs
 
             if self.space.drop_box_virtual_([x, y, z], (xs, ys, zs), False, self.next_den, self.setting):
-                tmp_list.append([xs, ys, zs, xe, ye, self.bin_size[2], 0, 0, 1])
+                tmp_list.append([xs, ys, zs, xe, ye, ze, 0, 0, 1])
                 leaf_node_idx += 1
 
             if leaf_node_idx >= self.leaf_node_holder: break
@@ -150,12 +150,12 @@ class PackingDiscrete(gym.Env):
         if np.sum(leaf_node[0:6]) == 0: return (0, 0, 0), self.next_box
         x = int(leaf_node[3] - leaf_node[0])
         y = int(leaf_node[4] - leaf_node[1])
-        z = list(self.next_box)
-        z.remove(x)
-        z.remove(y)
-        z = z[0]
+        z = int(leaf_node[5] - leaf_node[2])
+        # z.remove(x)
+        # z.remove(y)
+        # z = z[0]
         action = (0, int(leaf_node[0]), int(leaf_node[1]))
-        next_box = (x, y, int(z))
+        next_box = (x, y, z)
         return action, next_box
 
     def step(self, action):
@@ -185,7 +185,7 @@ class PackingDiscrete(gym.Env):
             self.space.GENEMS([packed_box.lx, packed_box.ly, packed_box.lz,
                                packed_box.lx + packed_box.x, packed_box.ly + packed_box.y,
                                packed_box.lz + packed_box.z])
-        if self.LNES == 'EMS_':
+        if self.LNES == 'BP':
             self.space.GENEMS_([packed_box.lx, packed_box.ly, packed_box.lz,
                                 packed_box.lx + packed_box.x, packed_box.ly + packed_box.y,
                                 packed_box.lz + packed_box.z])

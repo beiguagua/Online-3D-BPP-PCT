@@ -130,7 +130,7 @@ def load_policy(load_path, upper_policy):
 def get_args():
     parser = argparse.ArgumentParser(description='PCT arguments')
     parser.add_argument('--setting', type=int, default=1, help='Experiment setting, please see our paper for details')
-    parser.add_argument('--lnes', type=str, default='EMS_', help='Leaf Node Expansion Schemes: EMS (recommend), EV, EP, CP, FC')
+    parser.add_argument('--lnes', type=str, default='BP', help='Leaf Node Expansion Schemes:BP(recommend), EMS , EV, EP, CP, FC')
     parser.add_argument('--internal-node-holder', type=int, default=80, help='Maximum number of internal nodes')
     parser.add_argument('--leaf-node-holder', type=int, default=50, help='Maximum number of leaf nodes')
     parser.add_argument('--shuffle',type=bool, default=True, help='Randomly shuffle the leaf nodes')
@@ -158,7 +158,7 @@ def get_args():
     parser.add_argument('--print-log-interval',     type=int,   default=10, help='How often to print training logs')
 
     parser.add_argument('--evaluate', action='store_true', help='Evaluate only')
-    parser.add_argument('--evaluation-episodes', type=int, default=100, metavar='N', help='Number of episodes evaluated')
+    parser.add_argument('--evaluation-episodes', type=int, default=500, metavar='N', help='Number of episodes evaluated')
     parser.add_argument('--load-model', action='store_true', help='Load the trained model')
     parser.add_argument('--model-path', type=str, help='The path to load model')
     parser.add_argument('--load-dataset', action='store_true', help='Load an existing dataset, otherwise the data is generated on the fly')

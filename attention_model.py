@@ -6,6 +6,7 @@ from graph_encoder import GraphAttentionEncoder
 from distributions import FixedCategorical
 from tools import observation_decode_leaf_node, init
 
+
 class AttentionModelFixed(NamedTuple):
     node_embeddings: torch.Tensor
     context_node_projected: torch.Tensor
@@ -24,6 +25,7 @@ class AttentionModelFixed(NamedTuple):
             )
         return super(AttentionModelFixed, self).__getitem__(key)
 
+
 class AttentionModel(nn.Module):
 
     def __init__(self,
@@ -34,9 +36,9 @@ class AttentionModel(nn.Module):
                  mask_inner=False,
                  mask_logits=False,
                  n_heads=1,
-                 internal_node_holder = None,
-                 internal_node_length = None,
-                 leaf_node_holder = None,
+                 internal_node_holder=None,
+                 internal_node_length=None,
+                 leaf_node_holder=None,
                  ):
         super(AttentionModel, self).__init__()
 
@@ -67,7 +69,7 @@ class AttentionModel(nn.Module):
             activate(),
             init_(nn.Linear(32, embedding_dim)))
 
-        self.init_leaf_node_embed  = nn.Sequential(
+        self.init_leaf_node_embed = nn.Sequential(
             init_(nn.Linear(8, 32)),
             activate(),
             init_(nn.Linear(32, embedding_dim)))
@@ -82,7 +84,7 @@ class AttentionModel(nn.Module):
             n_heads=n_heads,
             embed_dim=embedding_dim,
             n_layers=self.n_encode_layers,
-            graph_size = graph_size,
+            graph_size=graph_size,
             internal_node_holder=self.internal_node_holder
         )
 
@@ -90,7 +92,7 @@ class AttentionModel(nn.Module):
         self.project_fixed_context = nn.Linear(embedding_dim, embedding_dim, bias=False)
         assert embedding_dim % n_heads == 0
 
-    def forward(self, input, deterministic = False, evaluate_action = False, normFactor = 1, evaluate = False):
+    def forward(self, input, deterministic=False, evaluate_action=False, normFactor=1, evaluate=False):
 
         internal_nodes, leaf_nodes, next_item, invalid_leaf_nodes, full_mask = observation_decode_leaf_node(input,
                                                                                                             self.internal_node_holder,
@@ -102,7 +104,6 @@ class AttentionModel(nn.Module):
 
         # full_mask = full_mask[:,:-1]
 
-
         batch_size = input.size(0)
         graph_size = input.size(1)
         internal_nodes_size = internal_nodes.size(1)
@@ -110,37 +111,41 @@ class AttentionModel(nn.Module):
         next_size = next_item.size(1)
         # graph_size = internal_nodes_size+leaf_node_size
 
-        internal_inputs = internal_nodes.contiguous().view(batch_size * internal_nodes_size, self.internal_node_length)*normFactor
-        leaf_inputs = leaf_nodes.contiguous().view(batch_size * leaf_node_size, 8)*normFactor
-        current_inputs = next_item.contiguous().view(batch_size * next_size, 6)*normFactor
+        internal_inputs = internal_nodes.contiguous().view(batch_size * internal_nodes_size,
+                                                           self.internal_node_length) * normFactor
+        leaf_inputs = leaf_nodes.contiguous().view(batch_size * leaf_node_size, 8) * normFactor
+        current_inputs = next_item.contiguous().view(batch_size * next_size, 6) * normFactor
 
         # We use three independent node-wise Multi-Layer Perceptron (MLP) blocks to project these raw space configuration nodes
         # presented by descriptors in different formats into the homogeneous node features.
-        internal_embedded_inputs = self.init_internal_node_embed(internal_inputs).reshape((batch_size, -1, self.embedding_dim))
+        internal_embedded_inputs = self.init_internal_node_embed(internal_inputs).reshape(
+            (batch_size, -1, self.embedding_dim))
         leaf_embedded_inputs = self.init_leaf_node_embed(leaf_inputs).reshape((batch_size, -1, self.embedding_dim))
-        next_embedded_inputs = self.init_next_embed(current_inputs.squeeze()).reshape(batch_size, -1, self.embedding_dim)
-        init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs, next_embedded_inputs), dim=1).view(batch_size * graph_size, self.embedding_dim)
+        next_embedded_inputs = self.init_next_embed(current_inputs.squeeze()).reshape(batch_size, -1,
+                                                                                      self.embedding_dim)
+        init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs, next_embedded_inputs), dim=1).view(
+            batch_size * graph_size, self.embedding_dim)
         # init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs), dim=1).view(
         #     batch_size * graph_size, self.embedding_dim)
 
-
         # transform init_embedding into high-level node features.
-        embeddings, _ = self.embedder(init_embedding,mask = full_mask, evaluate = evaluate)
+        embeddings, _ = self.embedder(init_embedding, mask=full_mask, evaluate=evaluate)
         embedding_shape = (batch_size, graph_size, embeddings.shape[-1])
-        
+
         # Decide the leaf node indices for accommodating the current item
         log_p, action_log_prob, pointers, dist_entropy, dist, hidden = self._inner(embeddings,
-                                                          deterministic=deterministic,
-                                                          evaluate_action=evaluate_action,
-                                                          shape = embedding_shape,
-                                                          mask = leaf_node_mask,
-                                                          full_mask = full_mask,
-                                                          valid_length = valid_length)
+                                                                                   deterministic=deterministic,
+                                                                                   evaluate_action=evaluate_action,
+                                                                                   shape=embedding_shape,
+                                                                                   mask=leaf_node_mask,
+                                                                                   full_mask=full_mask,
+                                                                                   valid_length=valid_length)
         return action_log_prob, pointers, dist_entropy, hidden, dist
 
-    def _inner(self, embeddings, mask = None, deterministic = False, evaluate_action = False, shape = None, full_mask = None, valid_length =None): # 元素齐了
+    def _inner(self, embeddings, mask=None, deterministic=False, evaluate_action=False, shape=None, full_mask=None,
+               valid_length=None):  # 元素齐了
         # The aggregation of global feature
-        fixed = self._precompute(embeddings, shape = shape, full_mask = full_mask, valid_length = valid_length)
+        fixed = self._precompute(embeddings, shape=shape, full_mask=full_mask, valid_length=valid_length)
         # Calculate probabilities of selecting leaf nodes
         log_p, mask = self._get_log_p(fixed, mask)
 
@@ -172,19 +177,19 @@ class AttentionModel(nn.Module):
         # Collected lists, return Tensor
         return log_p, action_log_probs, selected, dist_entropy, dist, fixed.context_node_projected
 
-    def _precompute(self, embeddings, num_steps=1, shape = None, full_mask = None, valid_length = None):
+    def _precompute(self, embeddings, num_steps=1, shape=None, full_mask=None, valid_length=None):
         # The aggregation of global feature, only happens on the eligible nodes.
         transEmbedding = embeddings.view(shape)
-        full_mask = full_mask.view(shape[0], shape[1],1).expand(shape).bool()
-        transEmbedding[full_mask]  = 0
+        full_mask = full_mask.view(shape[0], shape[1], 1).expand(shape).bool()
+        transEmbedding[full_mask] = 0
         graph_embed = transEmbedding.view(shape).sum(1)
         transEmbedding = transEmbedding.view(embeddings.shape)
 
-        graph_embed = graph_embed / valid_length.reshape((-1,1))
+        graph_embed = graph_embed / valid_length.reshape((-1, 1))
         fixed_context = self.project_fixed_context(graph_embed)
 
         glimpse_key_fixed, glimpse_val_fixed, logit_key_fixed = \
-            self.project_node_embeddings(transEmbedding).view((shape[0], 1, shape[1],-1)).chunk(3, dim=-1)
+            self.project_node_embeddings(transEmbedding).view((shape[0], 1, shape[1], -1)).chunk(3, dim=-1)
 
         fixed_attention_node_data = (
             self._make_heads(glimpse_key_fixed, num_steps),
@@ -193,7 +198,7 @@ class AttentionModel(nn.Module):
         )
         return AttentionModelFixed(transEmbedding, fixed_context, *fixed_attention_node_data)
 
-    def _get_log_p(self, fixed, mask = None, normalize=True):
+    def _get_log_p(self, fixed, mask=None, normalize=True):
         # Compute query = context node embedding
         query = fixed.context_node_projected[:, None, :]
 
@@ -217,7 +222,7 @@ class AttentionModel(nn.Module):
 
         # Batch matrix multiplication to compute compatibilities (n_heads, batch_size, num_steps, graph_size)
         compatibility = torch.matmul(glimpse_Q, glimpse_K.transpose(-2, -1)) / math.sqrt(glimpse_Q.size(-1))
-        logits = compatibility.reshape([-1,1,compatibility.shape[-1]])
+        logits = compatibility.reshape([-1, 1, compatibility.shape[-1]])
 
         # From the logits compute the probabilities by clipping, masking and softmax
         if self.tanh_clipping > 0:
@@ -237,6 +242,6 @@ class AttentionModel(nn.Module):
 
         return (
             v.contiguous().view(v.size(0), v.size(1), v.size(2), self.n_heads, -1)
-                .expand(v.size(0), v.size(1) if num_steps is None else num_steps, v.size(2), self.n_heads, -1)
-                .permute(3, 0, 1, 2, 4)
+            .expand(v.size(0), v.size(1) if num_steps is None else num_steps, v.size(2), self.n_heads, -1)
+            .permute(3, 0, 1, 2, 4)
         )

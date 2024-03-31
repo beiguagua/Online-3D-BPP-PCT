@@ -97,7 +97,7 @@ class MultiHeadAttention(nn.Module):
 
         # Optionally apply mask to prevent attention
         mask = mask.unsqueeze(1).repeat((1, graph_size, 1)).bool()
-        mask[:,self.internal_node_holder:-1,self.internal_node_holder:-1] = 1
+        mask[:,self.internal_node_holder:-1,self.internal_node_holder:-1] = True
         if mask is not None:
             mask = mask.view(1, batch_size, n_query, graph_size).expand_as(compatibility)
             if data['evaluate']:

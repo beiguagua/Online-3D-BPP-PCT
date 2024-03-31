@@ -395,8 +395,13 @@ class Space(object):
             self.boxes.append(box_now)  # record rotated box
             self.plain = self.update_height_graph(self.plain, self.boxes[-1])
             self.height = max(self.height, max_h + z)
-            self.box_vec[self.box_idx] = np.array(
-                [lx, ly, max_h, lx + x, ly + y, max_h + z, density, 0, 1])
+            if self.box_idx < len(self.box_vec):
+                self.box_vec[self.box_idx] = np.array(
+                    [lx, ly, max_h, lx + x, ly + y, max_h + z, density, 0, 1])
+            else:
+                self.box_vec=np.roll(self.box_vec,-1)
+                self.box_vec[-1] = np.array(
+                    [lx, ly, max_h, lx + x, ly + y, max_h + z, density, 0, 1])
             self.box_idx += 1
             return True
         return False
@@ -592,16 +597,16 @@ class Space(object):
         self.EliminateInscribedEMS_()
 
         # maintain the event point by the way
-        cx_min, cy_min, cz_min, cx_max, cy_max, cz_max = itemLocation
-        # bottom
-        if cz_min < self.plain_size[2]:
-            bottomRecorder = self.ZMAP[cz_min]
-            cbox2d = [cx_min, cy_min, cx_max, cy_max]
-            maintainEventBottom(cbox2d, bottomRecorder['x_up'], bottomRecorder['y_left'], bottomRecorder['x_bottom'],
-                                bottomRecorder['y_right'], self.plain_size)
-
-        if cz_max < self.plain_size[2]:
-            AddNewEMSZ(itemLocation, self)
+        # cx_min, cy_min, cz_min, cx_max, cy_max, cz_max = itemLocation
+        # # bottom
+        # if cz_min < self.plain_size[2]:
+        #     bottomRecorder = self.ZMAP[cz_min]
+        #     cbox2d = [cx_min, cy_min, cx_max, cy_max]
+        #     maintainEventBottom(cbox2d, bottomRecorder['x_up'], bottomRecorder['y_left'], bottomRecorder['x_bottom'],
+        #                         bottomRecorder['y_right'], self.plain_size)
+        #
+        # if cz_max < self.plain_size[2]:
+        #     AddNewEMSZ(itemLocation, self)
 
     # Split an EMS when it intersects a placed item
     def Difference(self, emsID, intersection):
@@ -761,8 +766,8 @@ class Space(object):
         posVec = np.array(list(posVec))
         return posVec
 
-    # Convert EMS to placement (leaf node) for the current item.
-    def EMSPoint_(self, next_box, setting):
+    # Convert BP to placement (leaf node) for the current item.
+    def BoundaryPoint(self, next_box, setting):
         posVec = set()
         if setting == 2:
             orientation = 6
