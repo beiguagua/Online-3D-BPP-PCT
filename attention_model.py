@@ -1,9 +1,9 @@
 import torch
 from torch import nn
 import math
-from typing import NamedTuple
+from typing import NamedTuple, Tuple, Optional
 from graph_encoder import GraphAttentionEncoder
-from distributions import FixedCategorical
+from distributions import FixedCategoricalScript
 from tools import observation_decode_leaf_node, init
 
 
@@ -14,39 +14,39 @@ class AttentionModelFixed(NamedTuple):
     glimpse_val: torch.Tensor
     logit_key: torch.Tensor
 
-    def __getitem__(self, key):
-        if torch.is_tensor(key) or isinstance(key, slice):
-            return AttentionModelFixed(
-                node_embeddings=self.node_embeddings[key],
-                context_node_projected=self.context_node_projected[key],
-                glimpse_key=self.glimpse_key[:, key],
-                glimpse_val=self.glimpse_val[:, key],
-                logit_key=self.logit_key[key]
-            )
-        return super(AttentionModelFixed, self).__getitem__(key)
+    # def __getitem__(self, key):
+    #     if torch.is_tensor(key) or isinstance(key, slice):
+    #         return AttentionModelFixed(
+    #             node_embeddings=self.node_embeddings[key],
+    #             context_node_projected=self.context_node_projected[key],
+    #             glimpse_key=self.glimpse_key[:, key],
+    #             glimpse_val=self.glimpse_val[:, key],
+    #             logit_key=self.logit_key[key]
+    #         )
+    #     return super(AttentionModelFixed, self).__getitem__(key)
 
 
 class AttentionModel(nn.Module):
 
     def __init__(self,
-                 embedding_dim,
-                 hidden_dim,
-                 n_encode_layers=2,
-                 tanh_clipping=10.,
-                 mask_inner=False,
-                 mask_logits=False,
-                 n_heads=1,
-                 internal_node_holder=None,
-                 internal_node_length=None,
-                 leaf_node_holder=None,
+                 embedding_dim: int,
+                 hidden_dim: int,
+                 n_encode_layers: int = 2,
+                 tanh_clipping: int = 10.,
+                 mask_inner: bool = False,
+                 mask_logits: bool = False,
+                 n_heads: int = 1,
+                 internal_node_holder: int = 80,
+                 internal_node_length: int = 6,
+                 leaf_node_holder: int = 50,
+                 next_holder: int = 1
                  ):
         super(AttentionModel, self).__init__()
 
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.n_encode_layers = n_encode_layers
-        self.decode_type = None
-        self.temp = 1.0
+        self.temp: float = 1.0
 
         self.tanh_clipping = tanh_clipping
         self.mask_inner = mask_inner
@@ -55,51 +55,66 @@ class AttentionModel(nn.Module):
         self.n_heads = n_heads
         self.internal_node_holder = internal_node_holder
         self.internal_node_length = internal_node_length
-        self.next_holder = 1
+        self.next_holder = next_holder
         self.leaf_node_holder = leaf_node_holder
 
         graph_size = internal_node_holder + leaf_node_holder + self.next_holder
         # graph_size = internal_node_holder + leaf_node_holder
 
         activate, ini = nn.LeakyReLU, 'leaky_relu'
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), nn.init.calculate_gain(ini))
+
+        # 定义初始化函数
+        def custom_init(m):
+            if isinstance(m, nn.Linear):
+                # 对 Linear 层使用 xavier_normal_ 进行初始化
+                nn.init.xavier_normal_(m.weight.data, gain=nn.init.calculate_gain(ini))
+                # 对 bias 使用常数初始化
+                if m.bias is not None:
+                    nn.init.constant_(m.bias.data, 0)
 
         self.init_internal_node_embed = nn.Sequential(
-            init_(nn.Linear(self.internal_node_length, 32)),
+            nn.Linear(self.internal_node_length, 32),
             activate(),
-            init_(nn.Linear(32, embedding_dim)))
+            nn.Linear(32, embedding_dim))
+
+        self.init_internal_node_embed.apply(custom_init)
 
         self.init_leaf_node_embed = nn.Sequential(
-            init_(nn.Linear(8, 32)),
+            nn.Linear(8, 32),
             activate(),
-            init_(nn.Linear(32, embedding_dim)))
+            nn.Linear(32, embedding_dim))
+        self.init_leaf_node_embed.apply(custom_init)
 
         self.init_next_embed = nn.Sequential(
-            init_(nn.Linear(6, 32)),
+            nn.Linear(6, 32),
             activate(),
-            init_(nn.Linear(32, embedding_dim)))
+            nn.Linear(32, embedding_dim))
+        self.init_next_embed.apply(custom_init)
 
         # Graph attention model
         self.embedder = GraphAttentionEncoder(
             n_heads=n_heads,
             embed_dim=embedding_dim,
             n_layers=self.n_encode_layers,
-            graph_size=graph_size,
-            internal_node_holder=self.internal_node_holder
+            internal_node_holder=self.internal_node_holder,
+            leaf_node_holder=self.leaf_node_holder,
+            next_holder=self.next_holder
         )
 
         self.project_node_embeddings = nn.Linear(embedding_dim, 3 * embedding_dim, bias=False)
         self.project_fixed_context = nn.Linear(embedding_dim, embedding_dim, bias=False)
         assert embedding_dim % n_heads == 0
 
-    def forward(self, input, deterministic=False, evaluate_action=False, normFactor=1, evaluate=False):
+    def forward(self, input: torch.Tensor, deterministic: bool = False, evaluate_action: bool = False,
+                normFactor: float = 1, evaluate: bool = False) -> Tuple[
+        Optional[torch.Tensor], torch.Tensor, torch.Tensor, torch.Tensor, FixedCategoricalScript]:
 
         internal_nodes, leaf_nodes, next_item, invalid_leaf_nodes, full_mask = observation_decode_leaf_node(input,
                                                                                                             self.internal_node_holder,
                                                                                                             self.internal_node_length,
                                                                                                             self.leaf_node_holder)
         leaf_node_mask = 1 - invalid_leaf_nodes
-        valid_length = full_mask.sum(1)
+        valid_length: torch.Tensor = full_mask.sum(1)
         full_mask = 1 - full_mask
 
         # full_mask = full_mask[:,:-1]
@@ -142,8 +157,9 @@ class AttentionModel(nn.Module):
                                                                                    valid_length=valid_length)
         return action_log_prob, pointers, dist_entropy, hidden, dist
 
-    def _inner(self, embeddings, mask=None, deterministic=False, evaluate_action=False, shape=None, full_mask=None,
-               valid_length=None):  # 元素齐了
+    def _inner(self, embeddings: torch.Tensor, mask: torch.Tensor, shape: Tuple[int, int, int], full_mask: torch.Tensor,
+               valid_length:torch.Tensor, deterministic: bool = False, evaluate_action: bool = False) -> Tuple[
+        torch.Tensor, Optional[torch.Tensor], torch.Tensor, torch.Tensor, FixedCategoricalScript, torch.Tensor]:  # 元素齐了
         # The aggregation of global feature
         fixed = self._precompute(embeddings, shape=shape, full_mask=full_mask, valid_length=valid_length)
         # Calculate probabilities of selecting leaf nodes
@@ -158,7 +174,7 @@ class AttentionModel(nn.Module):
             masked_outs = log_p * (1 - mask) + 1e-20
         log_p = torch.div(masked_outs, torch.sum(masked_outs, dim=1).unsqueeze(1))
 
-        dist = FixedCategorical(probs=log_p)
+        dist = FixedCategoricalScript(probs=log_p)
         dist_entropy = dist.entropy()
 
         # Get maximum probabilities and indices
@@ -177,10 +193,12 @@ class AttentionModel(nn.Module):
         # Collected lists, return Tensor
         return log_p, action_log_probs, selected, dist_entropy, dist, fixed.context_node_projected
 
-    def _precompute(self, embeddings, num_steps=1, shape=None, full_mask=None, valid_length=None):
+    def _precompute(self, embeddings: torch.Tensor, full_mask: torch.Tensor, shape: Tuple[int, int, int],
+                    valid_length: torch.Tensor,
+                    num_steps: int = 1) -> AttentionModelFixed:
         # The aggregation of global feature, only happens on the eligible nodes.
         transEmbedding = embeddings.view(shape)
-        full_mask = full_mask.view(shape[0], shape[1], 1).expand(shape).bool()
+        full_mask = full_mask.view(shape[0], shape[1], 1).expand(shape) > 0
         transEmbedding[full_mask] = 0
         graph_embed = transEmbedding.view(shape).sum(1)
         transEmbedding = transEmbedding.view(embeddings.shape)
@@ -198,7 +216,8 @@ class AttentionModel(nn.Module):
         )
         return AttentionModelFixed(transEmbedding, fixed_context, *fixed_attention_node_data)
 
-    def _get_log_p(self, fixed, mask=None, normalize=True):
+    def _get_log_p(self, fixed: AttentionModelFixed, mask: torch.Tensor, normalize: bool = True) -> Tuple[
+        torch.Tensor, torch.Tensor]:
         # Compute query = context node embedding
         query = fixed.context_node_projected[:, None, :]
 
@@ -206,13 +225,14 @@ class AttentionModel(nn.Module):
         glimpse_K, glimpse_V, logit_K = self._get_attention_node_data(fixed)
 
         # Compute logits (unnormalized log_p)
-        log_p, glimpse = self._one_to_many_logits(query, glimpse_K, glimpse_V, logit_K, mask)
+        log_p = self._one_to_many_logits(query, glimpse_K, glimpse_V, logit_K, mask)
         if normalize:
             log_p = torch.log_softmax(log_p / self.temp, dim=-1)
         assert not torch.isnan(log_p).any()
         return log_p.exp(), mask
 
-    def _one_to_many_logits(self, query, glimpse_K, glimpse_V, logit_K, mask):
+    def _one_to_many_logits(self, query: torch.Tensor, glimpse_K: torch.Tensor, glimpse_V: torch.Tensor,
+                            logit_K: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
 
         batch_size, num_steps, embed_dim = query.size()
         key_size = val_size = embed_dim // self.n_heads
@@ -230,14 +250,14 @@ class AttentionModel(nn.Module):
 
         logits = logits[:, 0, self.internal_node_holder: self.internal_node_holder + self.leaf_node_holder]
         if self.mask_logits:
-            logits[mask.bool()] = -math.inf
+            logits[mask > 0] = -math.inf
 
-        return logits, None
+        return logits
 
-    def _get_attention_node_data(self, fixed):
+    def _get_attention_node_data(self, fixed: AttentionModelFixed) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return fixed.glimpse_key, fixed.glimpse_val, fixed.logit_key
 
-    def _make_heads(self, v, num_steps=None):
+    def _make_heads(self, v: torch.Tensor, num_steps: int) -> torch.Tensor:
         assert num_steps is None or v.size(1) == 1 or v.size(1) == num_steps
 
         return (

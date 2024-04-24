@@ -1,4 +1,5 @@
 import os
+import typing
 import torch
 from shutil import copyfile, copytree
 import torch.nn as nn
@@ -6,6 +7,17 @@ import argparse
 import givenData
 import numpy as np
 from gym.envs.registration import register
+import copy
+
+
+def clones(module, N):
+    """
+    生成相同网络层的克隆函数
+    :param module: 要克隆的目标网络层
+    :param N: 克隆的数量
+    :return:
+    """
+    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 def init(module, weight_init, bias_init, gain=1):
     weight_init(module.weight.data, gain=gain)
@@ -96,11 +108,13 @@ next_item         : The next item to be packed [density(optional), 0, 0,x, y, z]
 invalid_leaf_nodes: The mask which indicates whether this placement is feasible.
 full_mask         : The mask which indicates whether this node should be encode by GAT.
 '''
-def observation_decode_leaf_node(observation, internal_node_holder, internal_node_length, leaf_node_holder):
+def observation_decode_leaf_node(observation: torch.Tensor, internal_node_holder: int, internal_node_length: int,
+                                 leaf_node_holder: int) -> typing.Tuple[
+                                    torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     internal_nodes = observation[:, 0:internal_node_holder, 0:internal_node_length]
     leaf_nodes = observation[:, internal_node_holder:internal_node_holder + leaf_node_holder, 0:8]
-    current_box = observation[:,internal_node_holder + leaf_node_holder:, 0:6]
-    valid_flag = observation[:,internal_node_holder: internal_node_holder + leaf_node_holder, 8]
+    current_box = observation[:, internal_node_holder + leaf_node_holder:, 0:6]
+    valid_flag = observation[:, internal_node_holder: internal_node_holder + leaf_node_holder, 8]
     full_mask = observation[:, :, -1]
     return internal_nodes, leaf_nodes, current_box, valid_flag, full_mask
 
@@ -131,8 +145,9 @@ def get_args():
     parser = argparse.ArgumentParser(description='PCT arguments')
     parser.add_argument('--setting', type=int, default=1, help='Experiment setting, please see our paper for details')
     parser.add_argument('--lnes', type=str, default='BP', help='Leaf Node Expansion Schemes:BP(recommend), EMS , EV, EP, CP, FC')
-    parser.add_argument('--internal-node-holder', type=int, default=80, help='Maximum number of internal nodes')
-    parser.add_argument('--leaf-node-holder', type=int, default=50, help='Maximum number of leaf nodes')
+    parser.add_argument('--internal-node-holder', type=int, default=60, help='Maximum number of internal nodes')
+    parser.add_argument('--leaf-node-holder', type=int, default=80, help='Maximum number of leaf nodes')
+    parser.add_argument('--next-holder', type=int, default=1, help='Maximum number of next item nodes')
     parser.add_argument('--shuffle',type=bool, default=True, help='Randomly shuffle the leaf nodes')
     parser.add_argument('--continuous', action='store_true', help='Use continuous enviroment, otherwise the enviroment is discrete')
 
@@ -149,7 +164,7 @@ def get_args():
     parser.add_argument('--max-grad-norm',          type=float, default=0.5, help='Max norm of gradients')
     parser.add_argument('--embedding-size',     type=int, default=128,  help='Dimension of input embedding')
     parser.add_argument('--hidden-size',        type=int, default=128, help='Dimension of hidden layers')
-    parser.add_argument('--gat-layer-num',      type=int, default=1, help='The number GAT layers')
+    parser.add_argument('--gat-layer-num',      type=int, default=2, help='The number GAT layers')
     parser.add_argument('--gamma', type=float, default=1.0, metavar='γ', help='Discount factor')
 
     parser.add_argument('--model-save-interval',    type=int,   default=200   , help='How often to save the model')

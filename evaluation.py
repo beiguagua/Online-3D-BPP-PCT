@@ -58,4 +58,10 @@ def main(args):
 if __name__ == '__main__':
     registration_envs()
     args = get_args()
+    args.evaluate=True
+    args.load_model=True
+    args.model_path='./logs/experiment/itemset-BP-mask-600-60-80-2024.04.02-09-14-43/PCT-itemset-BP-mask-600-60-80-2024.04.02-09-14-43_2024.04.06-07-11-41.pt'
+    args.load_dataset=True
+    args.dataset_path='datasets/itemset/rs1.pt'
+    args.num_processes = 1
     main(args)

@@ -21,7 +21,7 @@ def evaluate(PCT_policy, eval_envs, timeStr, args, device, eval_freq = 100, fact
             selectedlogProb, selectedIdx, policy_dist_entropy, value = PCT_policy(all_nodes, True, normFactor = factor)
         selected_leaf_node = leaf_nodes[batchX, selectedIdx.squeeze()]
         items = eval_envs.packed
-        obs, reward, done, infos = eval_envs.step(selected_leaf_node.cpu().numpy())
+        obs, reward, done, infos = eval_envs.step(selected_leaf_node.squeeze().cpu().numpy())
 
         if done:
             print('Episode {} ends.'.format(step_counter))
