@@ -106,7 +106,8 @@ class MultiHeadAttention(nn.Module):
 
         # Optionally apply mask to prevent attention
         mask = mask.unsqueeze(1).repeat(*(1, graph_size, 1)) > 0
-        mask[:, self.internal_node_holder:-self.next_holder, self.internal_node_holder:-self.next_holder] = True
+        mask[:, self.internal_node_holder:self.internal_node_holder+self.leaf_node_holder, self.internal_node_holder:self.internal_node_holder+self.leaf_node_holder] = True
+        # mask[:, self.internal_node_holder:-self.next_holder, self.internal_node_holder:-self.next_holder] = True
         if mask is not None:
             mask = mask.view(1, batch_size, n_query, graph_size).expand_as(compatibility)
             if evaluate:
@@ -173,7 +174,8 @@ class GraphAttentionEncoder(nn.Module):
 
         # To map input to embedding space
         self.init_embed = nn.Linear(node_dim, embed_dim) if node_dim != 0 else None
-        self.graph_size = internal_node_holder+leaf_node_holder+next_holder
+        # self.graph_size = internal_node_holder+leaf_node_holder+next_holder
+        self.graph_size = internal_node_holder+leaf_node_holder
         mha_layer=MultiHeadAttentionLayer(n_heads, embed_dim, feed_forward_hidden,
                                               internal_node_holder=internal_node_holder,
                                               leaf_node_holder=leaf_node_holder, next_holder=next_holder)

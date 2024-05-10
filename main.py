@@ -16,8 +16,8 @@ def main(args):
 
     # The name of this experiment, related file backups and experiment tensorboard logs will
     # be saved to '.\logs\experiment' and '.\logs\runs'
-    custom = input('Please input the experiment name\n')
-    # custom = 'BP_Masked_80_50'
+    # custom = input('Please input the experiment name\n')
+    custom = 'test'
     timeStr = custom + '-' + time.strftime('%Y.%m.%d-%H-%M-%S', time.localtime(time.time()))
 
     if args.no_cuda:

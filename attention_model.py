@@ -4,7 +4,8 @@ import math
 from typing import NamedTuple, Tuple, Optional
 from graph_encoder import GraphAttentionEncoder
 from distributions import FixedCategoricalScript
-from tools import observation_decode_leaf_node, init
+from tools import observation_decode_leaf_node, observation_to_node
+from position_encoding import VolumetricPositionEncoding
 
 
 class AttentionModelFixed(NamedTuple):
@@ -58,8 +59,8 @@ class AttentionModel(nn.Module):
         self.next_holder = next_holder
         self.leaf_node_holder = leaf_node_holder
 
-        graph_size = internal_node_holder + leaf_node_holder + self.next_holder
-        # graph_size = internal_node_holder + leaf_node_holder
+        # graph_size = internal_node_holder + leaf_node_holder + self.next_holder
+        graph_size = internal_node_holder + leaf_node_holder
 
         activate, ini = nn.LeakyReLU, 'leaky_relu'
 
@@ -85,11 +86,16 @@ class AttentionModel(nn.Module):
             nn.Linear(32, embedding_dim))
         self.init_leaf_node_embed.apply(custom_init)
 
-        self.init_next_embed = nn.Sequential(
-            nn.Linear(6, 32),
-            activate(),
-            nn.Linear(32, embedding_dim))
-        self.init_next_embed.apply(custom_init)
+        # self.init_next_embed = nn.Sequential(
+        #     nn.Linear(6, 32),
+        #     activate(),
+        #     nn.Linear(32, embedding_dim))
+        # self.init_next_embed.apply(custom_init)
+
+        vol_bnds = [[-3.6, -2.4, 1.14], [1.093, 0.78, 2.92]]
+        voxel_size = 0.08
+        pe_type = "rotary"  # options: [ 'rotary', 'sinusoidal']
+        self.position_embed = VolumetricPositionEncoding(embedding_dim, vol_bnds, voxel_size, pe_type)
 
         # Graph attention model
         self.embedder = GraphAttentionEncoder(
@@ -109,22 +115,27 @@ class AttentionModel(nn.Module):
                 normFactor: float = 1, evaluate: bool = False) -> Tuple[
         Optional[torch.Tensor], torch.Tensor, torch.Tensor, torch.Tensor, FixedCategoricalScript]:
 
-        internal_nodes, leaf_nodes, next_item, invalid_leaf_nodes, full_mask = observation_decode_leaf_node(input,
-                                                                                                            self.internal_node_holder,
-                                                                                                            self.internal_node_length,
-                                                                                                            self.leaf_node_holder)
-        leaf_node_mask = 1 - invalid_leaf_nodes
+        # internal_nodes, leaf_nodes, next_item, invalid_leaf_nodes, full_mask = observation_decode_leaf_node(input,
+        #                                                                                                     self.internal_node_holder,
+        #                                                                                                     self.internal_node_length,
+        #                                                                                                     self.leaf_node_holder)
+        position, internal_nodes, leaf_nodes, next_item, invalid_leaf_nodes, full_mask = observation_to_node(input,
+                                                                                                             self.internal_node_holder,
+                                                                                                             self.internal_node_length,
+                                                                                                             self.leaf_node_holder)
+        leaf_node_mask = 1 - invalid_leaf_nodes   # 0:valid,1:invalid
+        # has_negative = torch.any(leaf_node_mask > 1)
         valid_length: torch.Tensor = full_mask.sum(1)
         full_mask = 1 - full_mask
 
         # full_mask = full_mask[:,:-1]
 
         batch_size = input.size(0)
-        graph_size = input.size(1)
+        # graph_size = input.size(1)
         internal_nodes_size = internal_nodes.size(1)
         leaf_node_size = leaf_nodes.size(1)
         next_size = next_item.size(1)
-        # graph_size = internal_nodes_size+leaf_node_size
+        graph_size = internal_nodes_size+leaf_node_size
 
         internal_inputs = internal_nodes.contiguous().view(batch_size * internal_nodes_size,
                                                            self.internal_node_length) * normFactor
@@ -136,12 +147,19 @@ class AttentionModel(nn.Module):
         internal_embedded_inputs = self.init_internal_node_embed(internal_inputs).reshape(
             (batch_size, -1, self.embedding_dim))
         leaf_embedded_inputs = self.init_leaf_node_embed(leaf_inputs).reshape((batch_size, -1, self.embedding_dim))
-        next_embedded_inputs = self.init_next_embed(current_inputs.squeeze()).reshape(batch_size, -1,
-                                                                                      self.embedding_dim)
-        init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs, next_embedded_inputs), dim=1).view(
-            batch_size * graph_size, self.embedding_dim)
-        # init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs), dim=1).view(
+        # next_embedded_inputs = self.init_next_embed(current_inputs.squeeze()).reshape(batch_size, -1,
+        #                                                                               self.embedding_dim)
+        # init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs, next_embedded_inputs), dim=1).view(
         #     batch_size * graph_size, self.embedding_dim)
+
+        pe=self.position_embed(position)
+
+        init_embedding = torch.cat((internal_embedded_inputs, leaf_embedded_inputs), dim=1).view(
+            batch_size , graph_size, self.embedding_dim)
+        
+        init_embedding=VolumetricPositionEncoding.embed_pos('rotary',init_embedding,pe)
+        
+        init_embedding=init_embedding.view(batch_size * graph_size, self.embedding_dim)
 
         # transform init_embedding into high-level node features.
         embeddings, _ = self.embedder(init_embedding, mask=full_mask, evaluate=evaluate)
@@ -158,22 +176,25 @@ class AttentionModel(nn.Module):
         return action_log_prob, pointers, dist_entropy, hidden, dist
 
     def _inner(self, embeddings: torch.Tensor, mask: torch.Tensor, shape: Tuple[int, int, int], full_mask: torch.Tensor,
-               valid_length:torch.Tensor, deterministic: bool = False, evaluate_action: bool = False) -> Tuple[
+               valid_length: torch.Tensor, deterministic: bool = False, evaluate_action: bool = False) -> Tuple[
         torch.Tensor, Optional[torch.Tensor], torch.Tensor, torch.Tensor, FixedCategoricalScript, torch.Tensor]:  # 元素齐了
         # The aggregation of global feature
         fixed = self._precompute(embeddings, shape=shape, full_mask=full_mask, valid_length=valid_length)
         # Calculate probabilities of selecting leaf nodes
         log_p, mask = self._get_log_p(fixed, mask)
-
+        # has_negative = torch.any(log_p < 0)
         # The leaf node which is not feasible will be masked in a soft way.
+        # has_negative = torch.any(mask > 1)
         if deterministic:
             masked_outs = log_p * (1 - mask)
             if torch.sum(masked_outs) == 0:
                 masked_outs += 1e-20
         else:
             masked_outs = log_p * (1 - mask) + 1e-20
+        # has_negative = torch.any(masked_outs < 0)
         log_p = torch.div(masked_outs, torch.sum(masked_outs, dim=1).unsqueeze(1))
-
+        # 判断是否存在负数
+        # has_negative = torch.any(log_p < 0)
         dist = FixedCategoricalScript(probs=log_p)
         dist_entropy = dist.entropy()
 
@@ -205,7 +226,7 @@ class AttentionModel(nn.Module):
 
         graph_embed = graph_embed / valid_length.reshape((-1, 1))
         fixed_context = self.project_fixed_context(graph_embed)
-
+        assert not torch.isnan(fixed_context).any()
         glimpse_key_fixed, glimpse_val_fixed, logit_key_fixed = \
             self.project_node_embeddings(transEmbedding).view((shape[0], 1, shape[1], -1)).chunk(3, dim=-1)
 
@@ -226,6 +247,7 @@ class AttentionModel(nn.Module):
 
         # Compute logits (unnormalized log_p)
         log_p = self._one_to_many_logits(query, glimpse_K, glimpse_V, logit_K, mask)
+        
         if normalize:
             log_p = torch.log_softmax(log_p / self.temp, dim=-1)
         assert not torch.isnan(log_p).any()
@@ -236,12 +258,13 @@ class AttentionModel(nn.Module):
 
         batch_size, num_steps, embed_dim = query.size()
         key_size = val_size = embed_dim // self.n_heads
-
+        
         # Compute the glimpse, rearrange dimensions so the dimensions are (n_heads, batch_size, num_steps, 1, key_size)
         glimpse_Q = query.view(batch_size, num_steps, self.n_heads, 1, key_size).permute(2, 0, 1, 3, 4)
-
+        
         # Batch matrix multiplication to compute compatibilities (n_heads, batch_size, num_steps, graph_size)
         compatibility = torch.matmul(glimpse_Q, glimpse_K.transpose(-2, -1)) / math.sqrt(glimpse_Q.size(-1))
+        
         logits = compatibility.reshape([-1, 1, compatibility.shape[-1]])
 
         # From the logits compute the probabilities by clipping, masking and softmax

@@ -43,7 +43,7 @@ class PackingDiscrete(gym.Env):
         self.test = load_test_data
         self.observation_space = gym.spaces.Box(low=0.0, high=self.space.height,
                                                 shape=((
-                                                                   self.internal_node_holder + self.leaf_node_holder + self.next_holder) * 9,))
+                                                               self.internal_node_holder + self.leaf_node_holder + self.next_holder) * 9,))
         self.next_box_vec = np.zeros((self.next_holder, 9))
 
         self.LNES = LNES  # Leaf Node Expansion Schemes: EMS (recommend), EV, EP, CP, FC
@@ -61,7 +61,7 @@ class PackingDiscrete(gym.Env):
     def get_box_ratio(self):
         coming_box = self.next_box
         return (coming_box[0] * coming_box[1] * coming_box[2]) / (
-                    self.space.plain_size[0] * self.space.plain_size[1] * self.space.plain_size[2])
+                self.space.plain_size[0] * self.space.plain_size[1] * self.space.plain_size[2])
 
     def reset(self):
         self.box_creator.reset()
@@ -94,11 +94,19 @@ class PackingDiscrete(gym.Env):
         boxes.append(self.space.box_vec)
         leaf_nodes.append(self.get_possible_position())
 
+        boxes = np.array(boxes).reshape(self.internal_node_holder,-1)
+        boxes[:, 3:6] = boxes[:, 3:6] - boxes[:, 0:3]
+        leaf_nodes = np.array(leaf_nodes).reshape(self.leaf_node_holder,-1)
+        leaf_nodes[:, 3:6] = leaf_nodes[:, 3:6] - leaf_nodes[:, 0:3]
+        
+        # 判断第二列是否存在大于 1 的值
+        # has_greater_than_1 = np.any(leaf_nodes[:, 8] > 1)
+
         next_box = sorted(list(self.next_box))
         self.next_box_vec[:, 3:6] = next_box
         self.next_box_vec[:, 0] = self.next_den
         self.next_box_vec[:, -1] = 1
-        return np.reshape(np.concatenate((*boxes, *leaf_nodes, self.next_box_vec)), (-1))
+        return np.reshape(np.concatenate((boxes, leaf_nodes, self.next_box_vec)), (-1))
 
     # Generate the next item to be placed.
     def gen_next_box(self):
@@ -148,9 +156,12 @@ class PackingDiscrete(gym.Env):
     # Convert the selected leaf node to the placement of the current item.
     def LeafNode2Action(self, leaf_node):
         if np.sum(leaf_node[0:6]) == 0: return (0, 0, 0), self.next_box
-        x = int(leaf_node[3] - leaf_node[0])
-        y = int(leaf_node[4] - leaf_node[1])
-        z = int(leaf_node[5] - leaf_node[2])
+        x = int(leaf_node[3])
+        y = int(leaf_node[4])
+        z = int(leaf_node[5])
+        # x = int(leaf_node[3] - leaf_node[0])
+        # y = int(leaf_node[4] - leaf_node[1])
+        # z = int(leaf_node[5] - leaf_node[2])
         # z.remove(x)
         # z.remove(y)
         # z = z[0]
@@ -202,4 +213,3 @@ class PackingDiscrete(gym.Env):
         info = dict()
         info['counter'] = len(self.space.boxes)
         return self.cur_observation(), reward, done, info
-
