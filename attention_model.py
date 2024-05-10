@@ -93,6 +93,7 @@ class AttentionModel(nn.Module):
         # self.init_next_embed.apply(custom_init)
 
         vol_bnds = [[-3.6, -2.4, 1.14], [1.093, 0.78, 2.92]]
+        vol_bnds=torch.FloatTensor(vol_bnds)
         voxel_size = 0.08
         pe_type = "rotary"  # options: [ 'rotary', 'sinusoidal']
         self.position_embed = VolumetricPositionEncoding(embedding_dim, vol_bnds, voxel_size, pe_type)

@@ -20,7 +20,7 @@ args.lnes='BP'
 
 agent = DRL_GAT(args)
 
-PCT_policy = load_policy('logs/experiment/BP_Mask_10_60_80-2024.04.24-15-04-17/PCT-BP_Mask_10_60_80-2024.04.24-15-04-17_2024.04.24-15-04-24.pt', agent)
+PCT_policy = load_policy('logs/experiment/test-2024.04.25-10-45-50/PCT-test-2024.04.25-10-45-50_2024.05.02-09-08-14.pt', agent)
 PCT_policy.eval()
 scripted_model = torch.jit.script(agent)
-scripted_model.save('BP_Mask_10_60_80_itemsize.pt')
+scripted_model.save('BP_Mask_10_60_80.pt')

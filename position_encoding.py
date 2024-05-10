@@ -4,7 +4,7 @@ from torch import nn
 
 class VolumetricPositionEncoding(nn.Module):
 
-    def __init__(self, feature_dim,vol_bnds,voxel_size,pe_type):
+    def __init__(self, feature_dim:int,vol_bnds:torch.Tensor,voxel_size:float,pe_type:str):
         super().__init__()
 
         self.feature_dim = feature_dim
@@ -18,8 +18,9 @@ class VolumetricPositionEncoding(nn.Module):
         @param xyz: B,N,3
         @return: B,N,3
         '''
-        if type ( self.vol_origin ) == list :
-            self.vol_origin = torch.FloatTensor(self.vol_origin ).view(1, 1, -1).to( xyz.device )
+        # if type ( self.vol_origin ) == list :
+        #     self.vol_origin = torch.FloatTensor(self.vol_origin ).view(1, 1, -1).to( xyz.device )
+        self.vol_origin = self.vol_origin.view(1, 1, -1).to(xyz.device)
         return (xyz - self.vol_origin) / self.voxel_size
 
     @staticmethod
@@ -35,7 +36,7 @@ class VolumetricPositionEncoding(nn.Module):
         return x
 
     @staticmethod
-    def embed_pos(pe_type, x, pe):
+    def embed_pos(pe_type:str, x, pe):
         """ combine feature and position code
         """
         if  pe_type == 'rotary':
@@ -70,8 +71,12 @@ class VolumetricPositionEncoding(nn.Module):
 
         elif self.pe_type == "rotary" :
             # sin/cos [θ0,θ1,θ2......θd/6-1] -> sin/cos [θ0,θ0,θ1,θ1,θ2,θ2......θd/6-1,θd/6-1]
-            sinx, cosx, siny, cosy, sinz, cosz = map( lambda  feat:torch.stack([feat, feat], dim=-1).view(bsize, npoint, -1),
-                 [ sinx, cosx, siny, cosy, sinz, cosz] )
+            # sinx, cosx, siny, cosy, sinz, cosz = map( lambda  feat:torch.stack([feat, feat], dim=-1).view(bsize, npoint, -1),
+            #      [ sinx, cosx, siny, cosy, sinz, cosz] )
+            sinx, cosx, siny, cosy, sinz, cosz = [
+                torch.stack([feat, feat], dim=-1).view(bsize, npoint, -1)
+                for feat in [sinx, cosx, siny, cosy, sinz, cosz]
+            ]
             sin_pos = torch.cat([sinx,siny,sinz], dim=-1)
             cos_pos = torch.cat([cosx,cosy,cosz], dim=-1)
             position_code = torch.stack( [cos_pos, sin_pos] , dim=-1)
